@@ -1,0 +1,190 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --ted-red: #E62B1E;
+  --ted-red-hover: #C52216;
+  --bg-dark: #000000;
+  --bg-darker: #000000;
+  --bg-card: #111111;
+  --bg-card-hover: #161616;
+  --bg-input: #0A0A0A;
+  --text-main: #FFFFFF;
+  --text-muted: #888888;
+  --text-secondary: #CCCCCC;
+  --border-color: #222222;
+  --border-light: #333333;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: dark;
+  color: var(--text-main);
+  background-color: var(--bg-dark);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--bg-dark);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+a {
+  color: var(--text-main);
+  text-decoration: inherit;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: var(--ted-red);
+}
+
+button {
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  padding: 0.6em 1.2em;
+  font-size: 0.9em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+button:hover {
+  border-color: var(--border-light);
+  background-color: var(--bg-card-hover);
+}
+
+button.primary {
+  background-color: var(--ted-red);
+  color: white;
+  border: 1px solid var(--ted-red);
+}
+
+button.primary:hover {
+  background-color: var(--ted-red-hover);
+  border-color: var(--ted-red-hover);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6em 1.2em;
+  font-size: 0.9em;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  color: var(--text-main);
+}
+
+.btn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-main);
+}
+
+.btn.primary {
+  background-color: var(--ted-red);
+  color: white;
+  border-color: var(--ted-red);
+}
+
+.btn.primary:hover {
+  background-color: var(--ted-red-hover);
+  border-color: var(--ted-red-hover);
+  color: white;
+}
+
+.btn.secondary {
+  background-color: transparent;
+  border: 1px solid var(--border-color);
+}
+
+.btn.secondary:hover {
+  background-color: var(--bg-card);
+  border-color: var(--border-light);
+}
+
+/* Card utility */
+.card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+/* Form inputs */
+input, textarea, select {
+  width: 100%;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: border-color 0.15s ease;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--ted-red);
+}
+
+input::placeholder, textarea::placeholder {
+  color: #555555;
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+
+/* Loading state */
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}

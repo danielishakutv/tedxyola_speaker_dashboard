@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Speaker {
+  id          String   @id @default(uuid())
+  name        String
+  email       String?
+  phone       String?
+  jobTitle    String?
+  company     String?
+  talkTitle   String
+  description String?
+  bio         String?
+  imageUrl    String?
+  socialLinks String?  // Will store stringified JSON array: [{"platform": "Twitter", "url": "..."}]
+  status      String   @default("DRAFT") // "DRAFT" or "LIVE"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
