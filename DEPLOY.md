@@ -201,3 +201,46 @@ pm2 logs tedx-speaker      # live logs for this app
 pm2 restart tedx-speaker   # after code/.env changes
 pm2 save                   # persist process list across reboots
 ```
+
+-------------------------------------------
+ALL UPDATES
+cd /opt/tedxyola-speaker && git pull
+# backend changed:  cd server && npm install && npx prisma generate && pm2 restart tedx-speaker
+# frontend changed: cd frontend && npm install && npm run build
+pm2 logs tedx-speaker   # live logs when something misbehaves
+
+
+
+--------------------------------------
+# 1. Clone (source lives outside public_html)
+cd /opt
+git clone https://github.com/danielishakutv/tedxyola_speaker_dashboard.git tedxyola-speaker
+
+# 2. Backend: install + .env + DB
+cd /opt/tedxyola-speaker/server
+npm install
+ADMIN_PASS='Tedx@2026' node -e '
+const bcrypt=require("bcryptjs"),crypto=require("crypto"),fs=require("fs");
+const hash=bcrypt.hashSync(process.env.ADMIN_PASS,10);
+const jwt=crypto.randomBytes(48).toString("hex");
+fs.writeFileSync(".env",[
+ "DATABASE_URL=\"file:./dev.db\"","","PORT=5000","",
+ "CLOUDINARY_CLOUD_NAME=\"\"","CLOUDINARY_API_KEY=\"\"","CLOUDINARY_API_SECRET=\"\"","",
+ "# Auth","JWT_SECRET=\""+jwt+"\"","ADMIN_USERNAME=\"admin\"","ADMIN_PASSWORD_HASH=\""+hash+"\"",""
+].join("\n"));
+console.log("Wrote .env — login user: admin");
+'   # 👈 change ADMIN_PASS above
+npx prisma generate
+npx prisma db push
+
+# 3. Frontend build
+cd /opt/tedxyola-speaker/frontend
+npm install
+npm run build
+
+# 4. Start with pm2 + smoke-test
+cd /opt/tedxyola-speaker/server
+pm2 start server.js --name tedx-speaker
+pm2 save
+echo "=== API check ===";  curl -s http://127.0.0.1:5000/api/public/speakers
+echo; echo "=== frontend check ==="; curl -sI http://127.0.0.1:5000/ | head -n1

@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Users, LogOut, Settings, LayoutDashboard } from 'lucide-react';
+import { Users, LogOut, Settings, LayoutDashboard, Code } from 'lucide-react';
 import './Sidebar.css';
 
 const Sidebar = () => {
@@ -28,6 +28,12 @@ const Sidebar = () => {
             <NavLink to="/speakers" className="nav-item">
               <Users size={18} />
               <span>Speakers</span>
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/api-docs" className="nav-item">
+              <Code size={18} />
+              <span>API Docs</span>
             </NavLink>
           </li>
           <li>

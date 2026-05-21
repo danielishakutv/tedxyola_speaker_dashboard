@@ -6,6 +6,7 @@ const PAGE_TITLES = {
   '/dashboard': 'Overview',
   '/speakers': 'Speakers',
   '/speakers/new': 'Add Speaker',
+  '/api-docs': 'API Documentation',
   '/settings': 'Settings',
 };
 

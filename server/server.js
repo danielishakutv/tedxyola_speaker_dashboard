@@ -94,11 +94,44 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 // ══════════════════════════════════════════════════════════
 
 // GET /api/public/speakers — only LIVE speakers, safe fields only
+// Optional query filters:
+//   q       full-text search across name, talkTitle, company, jobTitle, description, bio
+//   company filter by company (partial, case-insensitive)
+//   sort    newest (default) | oldest | name
+//   limit   max results, 1–100 (omit for all)
+//   offset  number of results to skip (pagination)
 app.get('/api/public/speakers', async (req, res) => {
   try {
+    const { q, company, sort = 'newest', limit, offset } = req.query;
+
+    const where = { status: 'LIVE' };
+    if (company) where.company = { contains: String(company) };
+    if (q) {
+      const term = String(q);
+      where.OR = [
+        { name:        { contains: term } },
+        { talkTitle:   { contains: term } },
+        { company:     { contains: term } },
+        { jobTitle:    { contains: term } },
+        { description: { contains: term } },
+        { bio:         { contains: term } },
+      ];
+    }
+
+    const orderBy =
+      sort === 'oldest' ? { createdAt: 'asc' } :
+      sort === 'name'   ? { name: 'asc' }      :
+                          { createdAt: 'desc' };
+
+    // limit: clamp to 1–100; offset: clamp to >= 0
+    const take = limit  !== undefined ? Math.min(Math.max(parseInt(limit,  10) || 0, 0), 100) || undefined : undefined;
+    const skip = offset !== undefined ? Math.max(parseInt(offset, 10) || 0, 0) : undefined;
+
     const speakers = await prisma.speaker.findMany({
-      where: { status: 'LIVE' },
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy,
+      ...(take !== undefined ? { take } : {}),
+      ...(skip !== undefined ? { skip } : {}),
       select: {
         id:          true,
         name:        true,

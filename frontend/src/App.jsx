@@ -5,6 +5,7 @@ import Overview from './pages/Overview';
 import SpeakersList from './pages/SpeakersList';
 import SpeakerForm from './pages/SpeakerForm';
 import Settings from './pages/Settings';
+import ApiDocs from './pages/ApiDocs';
 import './App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -24,6 +25,7 @@ function App() {
           <Route path="speakers" element={<SpeakersList />} />
           <Route path="speakers/new" element={<SpeakerForm />} />
           <Route path="speakers/edit/:id" element={<SpeakerForm />} />
+          <Route path="api-docs" element={<ApiDocs />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
