@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Upload, Save, CheckCircle, Plus, X, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Save, CheckCircle, Plus, X, AlertCircle, Link2 } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
 import './SpeakerForm.css';
 
 const PLATFORM_OPTIONS = ['Twitter', 'LinkedIn', 'Instagram', 'Facebook', 'YouTube', 'Website', 'GitHub', 'TikTok'];
 
-const REQUIRED_FIELDS = ['name', 'email', 'phone', 'jobTitle', 'company', 'talkTitle', 'bio', 'description'];
+const REQUIRED_FIELDS = ['name', 'bio', 'company', 'talkTitle'];
 
 const FIELD_LABELS = {
   name:        'Full Name',
@@ -30,7 +30,9 @@ const SpeakerForm = () => {
   });
 
   const [socialLinks,   setSocialLinks]   = useState([]);
+  const [imageMode,     setImageMode]     = useState('url'); // 'url' | 'upload'
   const [imageFile,     setImageFile]     = useState(null);
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const [imagePreview,  setImagePreview]  = useState(null);
   const [loading,       setLoading]       = useState(false);
   const [fetchLoading,  setFetchLoading]  = useState(isEditing);
@@ -54,7 +56,11 @@ const SpeakerForm = () => {
             bio:         data.bio         || '',
             description: data.description || '',
           });
-          if (data.imageUrl) setImagePreview(data.imageUrl);
+          if (data.imageUrl) {
+            setImagePreview(data.imageUrl);
+            setImageUrlInput(data.imageUrl);
+            setImageMode('url');
+          }
           if (data.socialLinks) {
             try { setSocialLinks(JSON.parse(data.socialLinks)); } catch { setSocialLinks([]); }
           }
@@ -79,8 +85,9 @@ const SpeakerForm = () => {
     if (!file) return;
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
-    if (errors.image) setErrors(prev => ({ ...prev, image: null }));
   };
+
+  const handleImageUrlChange = (e) => setImageUrlInput(e.target.value);
 
   /* ── Social links ────────────────────────────────────── */
   const addSocialLink    = () => setSocialLinks(prev => [...prev, { platform: 'Twitter', url: '' }]);
@@ -89,7 +96,7 @@ const SpeakerForm = () => {
     setSocialLinks(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
   };
 
-  /* ── Validation — ALL fields required ───────────────── */
+  /* ── Validation — only core fields required ─────────── */
   const validate = () => {
     const errs = {};
 
@@ -99,14 +106,9 @@ const SpeakerForm = () => {
       }
     });
 
-    // Email format
+    // Email format — only if an (optional) email was entered
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       errs.email = 'Enter a valid email address';
-    }
-
-    // Photo required on new speaker
-    if (!isEditing && !imagePreview) {
-      errs.image = 'Speaker photo is required';
     }
 
     // Social link URLs must not be empty if added
@@ -138,7 +140,11 @@ const SpeakerForm = () => {
       Object.entries(formData).forEach(([k, v]) => body.append(k, v));
       body.append('socialLinks', JSON.stringify(socialLinks));
       body.append('status', targetStatus);
-      if (imageFile) body.append('image', imageFile);
+      if (imageMode === 'upload') {
+        if (imageFile) body.append('image', imageFile);
+      } else {
+        body.append('imageUrl', imageUrlInput.trim());
+      }
 
       const res = await authFetch(
         isEditing ? `/api/speakers/${id}` : '/api/speakers',
@@ -157,6 +163,8 @@ const SpeakerForm = () => {
 
   if (fetchLoading) return <div className="loading-state">Loading speaker…</div>;
 
+  const previewSrc = imageMode === 'url' ? (imageUrlInput.trim() || null) : imagePreview;
+
   /* ── Render ──────────────────────────────────────────── */
   return (
     <div className="speaker-form-page">
@@ -170,7 +178,7 @@ const SpeakerForm = () => {
             <p className="form-page-subtitle">
               {isEditing
                 ? 'Update speaker profile details'
-                : 'All fields are required before publishing or saving as draft'}
+                : 'Name, short bio, company and talk title are required — everything else is optional'}
             </p>
           </div>
         </div>
@@ -213,7 +221,7 @@ const SpeakerForm = () => {
               {errors.name && <span className="field-error"><AlertCircle size={12} />{errors.name}</span>}
             </div>
             <div className="form-group">
-              <label>Email <span className="required">*</span></label>
+              <label>Email <span className="optional">(optional)</span></label>
               <input
                 type="email" name="email" value={formData.email} onChange={handleChange}
                 placeholder="jane@example.com" className={errors.email ? 'input-error' : ''}
@@ -224,7 +232,7 @@ const SpeakerForm = () => {
 
           <div className="field-row two-col">
             <div className="form-group">
-              <label>Job Title <span className="required">*</span></label>
+              <label>Job Title <span className="optional">(optional)</span></label>
               <input
                 type="text" name="jobTitle" value={formData.jobTitle} onChange={handleChange}
                 placeholder="e.g. CEO, Researcher, Activist" className={errors.jobTitle ? 'input-error' : ''}
@@ -242,7 +250,7 @@ const SpeakerForm = () => {
           </div>
 
           <div className="form-group">
-            <label>Phone <span className="required">*</span></label>
+            <label>Phone <span className="optional">(optional)</span></label>
             <input
               type="tel" name="phone" value={formData.phone} onChange={handleChange}
               placeholder="+1 (555) 000-0000" className={errors.phone ? 'input-error' : ''}
@@ -267,35 +275,74 @@ const SpeakerForm = () => {
           {/* Photo */}
           <div className="form-section card">
             <h3 className="section-heading">
-              Speaker Photo <span className="required">*</span>
+              Speaker Photo <span className="optional">(optional)</span>
             </h3>
-            <div className={`image-upload-zone ${errors.image ? 'zone-error' : ''}`}>
-              {imagePreview ? (
-                <div className="image-preview">
-                  <img src={imagePreview} alt="Preview" />
-                  <div className="image-overlay">
-                    <button
-                      type="button"
-                      className="btn secondary"
-                      onClick={() => document.getElementById('image-upload').click()}
-                    >
-                      Change Photo
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <label htmlFor="image-upload" className="upload-placeholder">
-                  <Upload size={26} />
-                  <span>Click to upload photo</span>
-                  <small>PNG, JPG — high resolution preferred</small>
-                </label>
-              )}
-              <input
-                type="file" id="image-upload" accept="image/*"
-                onChange={handleImageChange} style={{ display: 'none' }}
-              />
+
+            <div className="image-mode-tabs">
+              <button
+                type="button"
+                className={`image-mode-tab ${imageMode === 'url' ? 'active' : ''}`}
+                onClick={() => setImageMode('url')}
+              >
+                <Link2 size={13} /> Image URL
+              </button>
+              <button
+                type="button"
+                className={`image-mode-tab ${imageMode === 'upload' ? 'active' : ''}`}
+                onClick={() => setImageMode('upload')}
+              >
+                <Upload size={13} /> Upload
+              </button>
             </div>
-            {errors.image && <span className="field-error"><AlertCircle size={12} />{errors.image}</span>}
+
+            {imageMode === 'url' ? (
+              <>
+                <input
+                  type="url"
+                  value={imageUrlInput}
+                  onChange={handleImageUrlChange}
+                  placeholder="https://example.com/photo.jpg"
+                />
+                {previewSrc && (
+                  <div className="image-preview url-preview">
+                    <img
+                      src={previewSrc}
+                      alt="Preview"
+                      onError={e => { e.currentTarget.parentElement.classList.add('broken'); }}
+                      onLoad={e => { e.currentTarget.parentElement.classList.remove('broken'); }}
+                    />
+                    <span className="broken-hint">Image URL can’t be loaded</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="image-upload-zone">
+                {previewSrc ? (
+                  <div className="image-preview">
+                    <img src={previewSrc} alt="Preview" />
+                    <div className="image-overlay">
+                      <button
+                        type="button"
+                        className="btn secondary"
+                        onClick={() => document.getElementById('image-upload').click()}
+                      >
+                        Change Photo
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label htmlFor="image-upload" className="upload-placeholder">
+                    <Upload size={26} />
+                    <span>Click to upload photo</span>
+                    <small>PNG, JPG — high resolution preferred</small>
+                  </label>
+                )}
+                <input
+                  type="file" id="image-upload" accept="image/*"
+                  onChange={handleImageChange} style={{ display: 'none' }}
+                />
+              </div>
+            )}
           </div>
 
           {/* Social Links */}
@@ -358,7 +405,7 @@ const SpeakerForm = () => {
           </div>
 
           <div className="form-group">
-            <label>Talk Description <span className="required">*</span></label>
+            <label>Talk Description <span className="optional">(optional)</span></label>
             <textarea
               name="description" value={formData.description} onChange={handleChange}
               placeholder="Describe what this talk will cover, key themes, and what the audience will learn…"

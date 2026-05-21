@@ -156,6 +156,72 @@
   margin-top: 0.1rem;
 }
 
+/* ── Optional label hint ────────────────────────────────────── */
+.optional {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.72rem;
+  margin-left: 4px;
+}
+
+/* ── Image mode tabs (URL / Upload) ─────────────────────────── */
+.image-mode-tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.image-mode-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.image-mode-tab:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+}
+
+.image-mode-tab.active {
+  background-color: rgba(230, 43, 30, 0.1);
+  border-color: var(--ted-red);
+  color: var(--ted-red);
+}
+
+/* ── URL image preview ──────────────────────────────────────── */
+.url-preview {
+  margin-top: 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.url-preview .broken-hint { display: none; }
+
+.url-preview.broken { height: auto; }
+.url-preview.broken img { display: none; }
+.url-preview.broken .broken-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 /* ── Image Upload ───────────────────────────────────────────── */
 .image-upload-zone {
   border: 2px dashed var(--border-color);

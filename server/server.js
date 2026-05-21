@@ -208,8 +208,9 @@ app.get('/api/speakers/:id', requireAuth, async (req, res) => {
 // POST new speaker
 app.post('/api/speakers', requireAuth, upload.single('image'), async (req, res) => {
   try {
-    const { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status } = req.body;
-    let imageUrl = null;
+    const { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status, imageUrl: imageUrlInput } = req.body;
+    // Use a pasted image URL by default; an uploaded file (below) takes precedence.
+    let imageUrl = imageUrlInput?.trim() || null;
 
     if (req.file) {
       try {
@@ -217,7 +218,7 @@ app.post('/api/speakers', requireAuth, upload.single('image'), async (req, res) 
         imageUrl = result.secure_url;
       } catch (e) {
         console.error('Cloudinary upload failed:', e.message);
-        imageUrl = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150';
+        imageUrl = imageUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=150';
       }
     }
 
@@ -234,16 +235,20 @@ app.post('/api/speakers', requireAuth, upload.single('image'), async (req, res) 
 // PUT update speaker
 app.put('/api/speakers/:id', requireAuth, upload.single('image'), async (req, res) => {
   try {
-    const { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status } = req.body;
+    const { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status, imageUrl: imageUrlInput } = req.body;
     const data = { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status };
 
     if (req.file) {
+      // Uploaded file takes precedence
       try {
         const result = await uploadToCloudinary(req.file.buffer);
         data.imageUrl = result.secure_url;
       } catch (e) {
         console.error('Cloudinary upload failed:', e.message);
       }
+    } else if (imageUrlInput !== undefined) {
+      // Otherwise, set/clear the image from a pasted URL
+      data.imageUrl = imageUrlInput.trim() || null;
     }
 
     const speaker = await prisma.speaker.update({ where: { id: req.params.id }, data });
