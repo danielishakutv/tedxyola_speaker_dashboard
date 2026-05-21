@@ -1,59 +1,48 @@
 # Deployment Guide — TEDx Speaker Dashboard
 
-Deploy target: **Ubuntu/Debian VPS**, served at **https://speaker.tedxyola.com** with
-**Apache** as a reverse proxy in front of the Node backend.
+Target server: **Ubuntu 22.04 + Virtualmin/Apache**, running other Node apps under
+**pm2** with **Apache reverse-proxying each domain to a localhost port**.
 
-Architecture:
+This guide mirrors that existing pattern (e.g. `dashboard.tedxyola.com → 127.0.0.1:3200`).
 
 ```
-Browser ──HTTPS──▶ Apache (speaker.tedxyola.com)
-                     ├─ /            → static React build  (frontend/dist)
-                     └─ /api/*       → http://127.0.0.1:5000  (Node + Express, run by pm2)
-                                          └─ Prisma → SQLite (server/prisma/dev.db)
+Browser ──HTTPS──▶ Apache vhost speaker.tedxyola.com
+                     └─ ProxyPass /  →  http://127.0.0.1:5000   (Node + Express, pm2)
+                                          ├─ serves the React build (frontend/dist)
+                                          └─ /api/*  →  Prisma → SQLite (server/prisma/dev.db)
 ```
 
-The frontend uses **relative** API URLs (`/api/...`), so Apache just needs to proxy
-`/api` to the backend. No CORS, works over HTTPS, no hardcoded hostnames.
+Node serves **both** the compiled frontend and the API, so Apache only needs a single
+`ProxyPass /`. Port **5000** is free on this box (3000–3003/3101/3200/5432/6379 are taken).
 
-> Run everything as a normal user with `sudo` rights. Replace `speaker.tedxyola.com`
-> if you use a different hostname.
+Run everything below as **root**.
 
 ---
 
-## 1. Install Node.js 22 LTS, git, and pm2
+## 1. Clone the code (outside public_html)
+
+Keep source out of the web root; Apache proxies straight to Node, so `public_html`
+is not used by this app.
 
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs git
-node -v && npm -v          # expect v22.x and 10.x
-sudo npm install -g pm2
+cd /opt
+git clone https://github.com/danielishakutv/tedxyola_speaker_dashboard.git tedxyola-speaker
+cd tedxyola-speaker
 ```
 
-> Vite 8 (the build tool) requires Node 20.19+ or 22.12+. Node 22 LTS is recommended.
+> Node 20 + pm2 are already installed system-wide — no version changes needed.
 
 ---
 
-## 2. Clone the repo into /var/www
+## 2. Backend — install, configure, init database
 
 ```bash
-sudo mkdir -p /var/www
-cd /var/www
-sudo git clone https://github.com/danielishakutv/tedxyola_speaker_dashboard.git tedxyola
-sudo chown -R "$USER":"$USER" /var/www/tedxyola
-cd /var/www/tedxyola
-```
-
----
-
-## 3. Backend — install, configure, init database
-
-```bash
-cd /var/www/tedxyola/server
+cd /opt/tedxyola-speaker/server
 npm install
 ```
 
-Create the `.env` file with a freshly generated JWT secret and a bcrypt-hashed admin
-password. **Edit `ADMIN_PASS` to your own strong password first:**
+Create `.env` with a generated JWT secret and a bcrypt-hashed admin password.
+**Set `ADMIN_PASS` to your own strong password first:**
 
 ```bash
 ADMIN_PASS='ChangeMe_To_A_Strong_Password' node -e '
@@ -70,11 +59,10 @@ console.log("Wrote .env — login user: admin");
 '
 ```
 
-> **Cloudinary is optional.** Leave the three values blank to run without image
-> uploads — the API falls back to a placeholder image. To enable uploads, paste your
-> Cloudinary credentials into `.env` later and `pm2 restart tedx-backend`.
+> Cloudinary is optional (blank = image uploads fall back to a placeholder). Add keys
+> later and `pm2 restart tedx-speaker` to enable uploads.
 
-Generate the Prisma client and create the SQLite database:
+Generate the Prisma client and create the SQLite DB:
 
 ```bash
 npx prisma generate
@@ -83,139 +71,113 @@ npx prisma db push        # creates server/prisma/dev.db
 
 ---
 
-## 4. Run the backend with pm2
-
-Start it **from the `server/` directory** (so `.env` and the Prisma schema resolve):
+## 3. Build the frontend
 
 ```bash
-cd /var/www/tedxyola/server
-pm2 start server.js --name tedx-backend
-pm2 save
-pm2 startup               # run the `sudo ...` command it prints, to start on boot
-```
-
-Smoke-test the API locally:
-
-```bash
-curl http://127.0.0.1:5000/api/public/speakers     # → []  (empty list = working)
-```
-
-Useful pm2 commands while debugging:
-
-```bash
-pm2 logs tedx-backend       # live logs
-pm2 restart tedx-backend    # after a code/.env change
-pm2 status
-```
-
----
-
-## 5. Build the frontend
-
-```bash
-cd /var/www/tedxyola/frontend
+cd /opt/tedxyola-speaker/frontend
 npm install
-npm run build               # outputs static files to frontend/dist
+npm run build             # outputs to frontend/dist (served by the backend)
 ```
-
-> Low-RAM VPS (≤1 GB)? If `npm run build` is killed/OOMs, add swap first:
-> ```bash
-> sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
-> sudo mkswap /swapfile && sudo swapon /swapfile
-> ```
 
 ---
 
-## 6. Apache reverse proxy
+## 4. Run the backend with pm2 (port 5000)
 
-Enable the needed modules:
+Start from the `server/` directory so `.env` and the Prisma schema resolve:
 
 ```bash
-sudo a2enmod proxy proxy_http rewrite headers
+cd /opt/tedxyola-speaker/server
+pm2 start server.js --name tedx-speaker
+pm2 save                  # persist across reboots (pm2 startup is already configured)
 ```
 
-Create `/etc/apache2/sites-available/speaker.tedxyola.com.conf`:
+Smoke-test locally (before touching Apache):
 
-```apache
-<VirtualHost *:80>
-    ServerName speaker.tedxyola.com
-    DocumentRoot /var/www/tedxyola/frontend/dist
+```bash
+curl -s http://127.0.0.1:5000/api/public/speakers      # → []   (API works)
+curl -sI http://127.0.0.1:5000/ | head -n1             # → HTTP/1.1 200 OK (frontend served)
+```
 
-    <Directory /var/www/tedxyola/frontend/dist>
-        Require all granted
-        # SPA fallback so React Router deep links (e.g. /dashboard) work on refresh
-        FallbackResource /index.html
-    </Directory>
+---
 
-    # Forward API calls to the Node backend
+## 5. Apache reverse proxy
+
+The `speaker.tedxyola.com` vhost already exists (created by Virtualmin, SSL active).
+This script adds the reverse proxy to the `:443` block and an HTTP→HTTPS redirect to
+the `:80` block — idempotent, with a timestamped backup. Run as root:
+
+```bash
+python3 - <<'PY'
+import re, sys, time, shutil
+p = "/etc/apache2/sites-available/speaker.tedxyola.com.conf"
+s = open(p).read()
+if "tedx-speaker reverse proxy" in s:
+    print("Already patched — nothing to do."); sys.exit(0)
+shutil.copy(p, p + ".bak-" + time.strftime("%Y%m%d%H%M%S"))
+
+proxy = """    # >>> tedx-speaker reverse proxy >>>
+    ProxyRequests Off
     ProxyPreserveHost On
-    ProxyPass        /api  http://127.0.0.1:5000/api
-    ProxyPassReverse /api  http://127.0.0.1:5000/api
-
-    ErrorLog  ${APACHE_LOG_DIR}/tedxyola_error.log
-    CustomLog ${APACHE_LOG_DIR}/tedxyola_access.log combined
-</VirtualHost>
+    ProxyPass        /  http://127.0.0.1:5000/
+    ProxyPassReverse /  http://127.0.0.1:5000/
+    RequestHeader set X-Forwarded-Proto "https"
+    ProxyTimeout 60
+    # <<< tedx-speaker reverse proxy <<<
+"""
+redirect = """    # >>> tedx-speaker http->https >>>
+    RewriteCond %{REQUEST_URI} !^/\\.well-known
+    RewriteRule ^/(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+    # <<< tedx-speaker http->https <<<
+"""
+def patch(m):
+    b = m.group(0)
+    add = proxy if "SSLEngine on" in b else redirect
+    return b.replace("</VirtualHost>", add + "</VirtualHost>")
+s = re.sub(r"<VirtualHost.*?</VirtualHost>", patch, s, flags=re.S)
+open(p, "w").write(s)
+print("Patched", p)
+PY
 ```
 
-Enable the site and reload:
+Validate and reload:
 
 ```bash
-sudo a2ensite speaker.tedxyola.com.conf
-sudo apache2ctl configtest        # should say: Syntax OK
-sudo systemctl reload apache2
+apache2ctl configtest      # must say: Syntax OK
+systemctl reload apache2
 ```
+
+> `.well-known` is left unproxied/unredirected so Let's Encrypt renewals keep working.
+> If you ever regenerate this vhost from the Virtualmin UI, re-run the script above.
 
 ---
 
-## 7. HTTPS with Let's Encrypt
+## 6. Done — log in
 
-```bash
-sudo apt-get install -y certbot python3-certbot-apache
-sudo certbot --apache -d speaker.tedxyola.com
-```
-
-Certbot rewrites the vhost for port 443 and auto-renews.
-
----
-
-## 8. Firewall
-
-Expose only web + SSH. Port 5000 stays internal (only Apache reaches it):
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 'Apache Full'
-sudo ufw enable
-```
-
----
-
-## 9. Done — log in
-
-Open **https://speaker.tedxyola.com** → log in with:
+Open **https://speaker.tedxyola.com** and log in:
 
 - **Username:** `admin`
-- **Password:** the `ADMIN_PASS` you set in step 3
+- **Password:** the `ADMIN_PASS` you set in step 2
 
-Public speaker page data comes from speakers you mark **LIVE** in the dashboard.
+Speakers you mark **LIVE** in the dashboard appear on the public API
+(`/api/public/speakers`).
 
 ---
 
 ## Updating later (debug-from-server workflow)
 
 ```bash
-cd /var/www/tedxyola
+cd /opt/tedxyola-speaker
 git pull
 # backend changed:
-cd server && npm install && npx prisma generate && pm2 restart tedx-backend
+cd server && npm install && npx prisma generate && pm2 restart tedx-speaker
 # frontend changed:
-cd ../frontend && npm install && npm run build
+cd ../frontend && npm install && npm run build      # no pm2 restart needed for FE-only
 ```
 
-Schema change? After editing `server/prisma/schema.prisma`:
+Schema change (after editing `server/prisma/schema.prisma`):
 
 ```bash
-cd /var/www/tedxyola/server && npx prisma db push && pm2 restart tedx-backend
+cd /opt/tedxyola-speaker/server && npx prisma db push && pm2 restart tedx-speaker
 ```
 
 ---
@@ -224,8 +186,18 @@ cd /var/www/tedxyola/server && npx prisma db push && pm2 restart tedx-backend
 
 | Symptom | Check |
 |---|---|
-| Login fails / "Cannot reach the server" | `pm2 logs tedx-backend`; `curl http://127.0.0.1:5000/api/public/speakers` |
-| 502 from Apache on `/api` | Backend down (`pm2 status`) or proxy modules not enabled (`a2enmod proxy proxy_http`) |
-| Blank page / 404 on refresh of `/dashboard` | `FallbackResource /index.html` missing in vhost |
-| `Invalid credentials` | Re-run the `.env` step with the right `ADMIN_PASS`, then `pm2 restart tedx-backend` |
-| Images not uploading | Cloudinary keys blank — add them to `server/.env` and restart |
+| 502/503 from Apache | Backend down → `pm2 status`, `pm2 logs tedx-speaker` |
+| Login fails / "Cannot reach the server" | `curl http://127.0.0.1:5000/api/public/speakers` on the server |
+| Blank page or 404 on refresh of `/dashboard` | Frontend not built → `cd frontend && npm run build`; confirm `frontend/dist/index.html` exists |
+| `apache2ctl configtest` errors after patch | Restore the `.bak-*` file next to the vhost and re-run the script |
+| Cert renewal fails | Ensure `/.well-known` is excluded (the script does this) |
+| Images not uploading | Cloudinary keys blank — add to `server/.env`, then `pm2 restart tedx-speaker` |
+
+## pm2 quick reference
+
+```bash
+pm2 status                 # all apps (tedx-speaker + your existing ones)
+pm2 logs tedx-speaker      # live logs for this app
+pm2 restart tedx-speaker   # after code/.env changes
+pm2 save                   # persist process list across reboots
+```

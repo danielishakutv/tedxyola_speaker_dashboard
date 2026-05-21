@@ -6,6 +6,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
@@ -228,6 +231,27 @@ app.delete('/api/speakers/:id', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to delete speaker' });
   }
 });
+
+// ══════════════════════════════════════════════════════════
+// SERVE FRONTEND  (production build, if present)
+// ══════════════════════════════════════════════════════════
+// In production the backend also serves the compiled React app, so a single
+// reverse proxy (Apache → this port) handles both the UI and the API.
+// In local dev there is no build, so this block is skipped and Vite serves the UI.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distDir   = path.join(__dirname, '../frontend/dist');
+
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir));
+
+  // SPA fallback: any non-API GET that didn't match a static asset → index.html
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(path.join(distDir, 'index.html'));
+    }
+    next();
+  });
+}
 
 // ── Start ─────────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
