@@ -1,4 +1,7 @@
-const API = 'http://localhost:5000';
+// Relative base URL → calls go to the same origin that served the app.
+// In dev, Vite proxies /api to the backend (see vite.config.js).
+// In prod, the web server (Apache/nginx) proxies /api to the backend.
+const API = import.meta.env.VITE_API_URL ?? '';
 
 /**
  * Wrapper around fetch that automatically:
