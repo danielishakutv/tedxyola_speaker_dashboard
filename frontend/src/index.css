@@ -41,6 +41,14 @@ body {
   margin: 0;
   min-height: 100vh;
   background-color: var(--bg-dark);
+  overflow-x: hidden;
+}
+
+/* Lock background scroll while the mobile sidebar drawer is open */
+@media (max-width: 768px) {
+  body.sidebar-open {
+    overflow: hidden;
+  }
 }
 
 h1, h2, h3, h4, h5, h6 {
