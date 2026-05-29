@@ -7,6 +7,18 @@ import {
 import { authFetch } from '../utils/authFetch';
 import './Overview.css';
 
+/* Decode role + username from the stored JWT */
+const getUserFromToken = () => {
+  try {
+    const token = localStorage.getItem('tedx_token');
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return { username: payload.username || 'User', role: payload.role || 'editor' };
+  } catch {
+    return null;
+  }
+};
+
 /* ── Skeleton shimmer blocks ─────────────────────────────── */
 const Skeleton = ({ w = '100%', h = '14px', radius = '5px', style = {} }) => (
   <div className="ov-skeleton" style={{ width: w, height: h, borderRadius: radius, ...style }} />
@@ -37,6 +49,9 @@ const fmt = (d) =>
 const Overview = () => {
   const [speakers, setSpeakers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const user = getUserFromToken();
+  const isAdmin = user?.role === 'admin';
+  const displayName = user?.username || 'there';
 
   useEffect(() => {
     (async () => {
@@ -87,7 +102,7 @@ const Overview = () => {
   const quickActions = [
     { label: 'Add New Speaker', desc: 'Add to your lineup', icon: Mic, to: '/speakers/new', primary: true },
     { label: 'View All Speakers', desc: 'Browse & manage', icon: Users, to: '/speakers' },
-    { label: 'Settings', desc: 'Configure your event', icon: Settings, to: '/settings' },
+    ...(isAdmin ? [{ label: 'Settings', desc: 'Configure your event', icon: Settings, to: '/settings' }] : []),
   ];
 
   return (
@@ -96,7 +111,7 @@ const Overview = () => {
       {/* ── Greeting Banner ─────────────────────────────── */}
       <div className="ov-greeting">
         <div className="ov-greeting-text">
-          <h2>{getGreeting()}, Admin</h2>
+          <h2>{getGreeting()}, {displayName}</h2>
           <p>Here's what's happening with your TEDx event today.</p>
         </div>
         <Link to="/speakers/new" className="btn primary ov-cta">

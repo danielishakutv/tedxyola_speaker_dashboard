@@ -7,6 +7,16 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  passwordHash  String
+  role          String   @default("admin") // "admin" or "editor"
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  activities    Activity[]
+}
+
 model Speaker {
   id          String   @id @default(uuid())
   name        String
@@ -22,4 +32,24 @@ model Speaker {
   status      String   @default("DRAFT") // "DRAFT" or "LIVE"
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model Media {
+  id           String   @id @default(uuid())
+  filename     String   // stored filename on disk (uuid-based)
+  originalName String   // original filename from the user
+  url          String   // public URL e.g. /uploads/abc123.jpg
+  size         Int      // file size in bytes
+  mimeType     String
+  uploadedBy   String   // username
+  createdAt    DateTime @default(now())
+}
+
+model Activity {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String   // "LOGIN", "CREATE_SPEAKER", "UPDATE_SPEAKER", "DELETE_SPEAKER", etc.
+  details   String?  // JSON stringified details
+  timestamp DateTime @default(now())
 }

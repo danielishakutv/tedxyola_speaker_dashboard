@@ -3,7 +3,7 @@
    ══════════════════════════════════════════════════════════ */
 
 .settings-page {
-  max-width: 860px;
+  max-width: 960px;
   position: relative;
 }
 
@@ -108,6 +108,48 @@
   padding: 0.18rem 0.5rem;
   border-radius: 4px;
   white-space: nowrap;
+}
+
+/* ── User cell in account card ────────────────────────────── */
+.st-user-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.st-user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--ted-red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+/* ── Role badge in account card ───────────────────────────── */
+.st-role-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 5px;
+  letter-spacing: 0.01em;
+}
+
+.st-role-badge.admin {
+  background-color: rgba(230, 43, 30, 0.1);
+  color: var(--ted-red);
+  border: 1px solid rgba(230, 43, 30, 0.25);
+}
+
+.st-role-badge.editor {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+  border: 1px solid rgba(245, 158, 11, 0.2);
 }
 
 /* ── Status Badge ─────────────────────────────────────────── */
@@ -245,9 +287,438 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ══════════════════════════════════════════════════════════
+   AUDIT LOG — full redesign
+   ══════════════════════════════════════════════════════════ */
+
+.st-logs-section {
+  margin-top: 1.75rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* ── Log section header ───────────────────────────────────── */
+.st-logs-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.35rem 1.35rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.st-logs-title-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.st-logs-title-group h3 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 0.15rem;
+  letter-spacing: -0.01em;
+}
+
+.st-logs-title-group p {
+  font-size: 0.775rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.st-refresh-logs-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.775rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.st-refresh-logs-btn:hover {
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.st-refresh-logs-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Stats strip ──────────────────────────────────────────── */
+.st-log-stats {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.st-log-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.85rem 0.5rem;
+  border-right: 1px solid var(--border-color);
+  gap: 0.2rem;
+}
+
+.st-log-stat:last-child {
+  border-right: none;
+}
+
+.st-log-stat-value {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text-main);
+  line-height: 1;
+}
+
+.st-log-stat-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.st-log-stat.blue  .st-log-stat-value { color: #60a5fa; }
+.st-log-stat.green .st-log-stat-value { color: var(--success); }
+.st-log-stat.yellow .st-log-stat-value { color: var(--warning); }
+.st-log-stat.red   .st-log-stat-value { color: var(--danger); }
+
+/* ── Filter bar ───────────────────────────────────────────── */
+.st-log-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 1.35rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.st-filter-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.st-filter-btn {
+  padding: 0.3rem 0.7rem;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+
+.st-filter-btn:hover {
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.st-filter-btn.active {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.st-filter-btn.active.blue   { background-color: rgba(96,165,250,0.1);  border-color: rgba(96,165,250,0.25);  color: #60a5fa; }
+.st-filter-btn.active.green  { background-color: rgba(34,197,94,0.1);   border-color: rgba(34,197,94,0.25);   color: var(--success); }
+.st-filter-btn.active.yellow { background-color: rgba(245,158,11,0.1);  border-color: rgba(245,158,11,0.25);  color: var(--warning); }
+.st-filter-btn.active.red    { background-color: rgba(239,68,68,0.1);   border-color: rgba(239,68,68,0.25);   color: var(--danger); }
+
+.st-filter-count {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Date filter row — slightly more muted than the action row */
+.st-date-filters {
+  border-top: none;
+  padding-top: 0;
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+/* ── Log list container ───────────────────────────────────── */
+.st-logs-list {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1.35rem 1.35rem;
+  gap: 0.5rem;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.st-logs-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.st-logs-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.st-logs-list::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+/* ── Loading state ────────────────────────────────────────── */
+.st-logs-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 2.5rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.825rem;
+}
+
+/* ── Empty state ──────────────────────────────────────────── */
+.st-empty-logs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.st-empty-logs p {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.st-empty-logs span {
+  font-size: 0.775rem;
+}
+
+/* ── Log entry ────────────────────────────────────────────── */
+.st-log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.st-log-entry:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.st-log-entry.expanded {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Left accent bar */
+.st-log-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 8px 0 0 8px;
+}
+
+.st-log-entry.blue   .st-log-accent { background-color: #60a5fa; }
+.st-log-entry.green  .st-log-accent { background-color: var(--success); }
+.st-log-entry.yellow .st-log-accent { background-color: var(--warning); }
+.st-log-entry.red    .st-log-accent { background-color: var(--danger); }
+.st-log-entry.gray   .st-log-accent { background-color: var(--text-muted); }
+
+/* ── Icon wrap ────────────────────────────────────────────── */
+.st-log-icon-wrap {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.st-log-icon-wrap.blue   { background-color: rgba(96,165,250,0.12);  color: #60a5fa;         border: 1px solid rgba(96,165,250,0.2); }
+.st-log-icon-wrap.green  { background-color: rgba(34,197,94,0.12);   color: var(--success);  border: 1px solid rgba(34,197,94,0.2); }
+.st-log-icon-wrap.yellow { background-color: rgba(245,158,11,0.12);  color: var(--warning);  border: 1px solid rgba(245,158,11,0.2); }
+.st-log-icon-wrap.red    { background-color: rgba(239,68,68,0.12);   color: var(--danger);   border: 1px solid rgba(239,68,68,0.2); }
+.st-log-icon-wrap.gray   { background-color: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border-color); }
+
+/* ── Body ─────────────────────────────────────────────────── */
+.st-log-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.st-log-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.st-log-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.st-log-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Action badge */
+.st-log-action-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.st-log-action-badge.blue   { background-color: rgba(96,165,250,0.1);  color: #60a5fa;         border: 1px solid rgba(96,165,250,0.2); }
+.st-log-action-badge.green  { background-color: rgba(34,197,94,0.1);   color: var(--success);  border: 1px solid rgba(34,197,94,0.2); }
+.st-log-action-badge.yellow { background-color: rgba(245,158,11,0.1);  color: var(--warning);  border: 1px solid rgba(245,158,11,0.2); }
+.st-log-action-badge.red    { background-color: rgba(239,68,68,0.1);   color: var(--danger);   border: 1px solid rgba(239,68,68,0.2); }
+.st-log-action-badge.gray   { background-color: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border-color); }
+
+/* Who performed the action */
+.st-log-who {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.st-log-who strong {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+/* Subject (speaker name) */
+.st-log-subject {
+  font-size: 0.775rem;
+  color: var(--text-muted);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+/* Time */
+.st-log-time-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-muted);
+}
+
+.st-log-time-rel {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.st-log-expand-icon {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+/* ── Expanded detail panel ────────────────────────────────── */
+.st-log-detail-panel {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.st-log-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.775rem;
+}
+
+.st-log-detail-row span {
+  color: var(--text-muted);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.st-log-detail-row code {
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  background-color: rgba(255, 255, 255, 0.04);
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  border: 1px solid var(--border-color);
+  word-break: break-all;
+}
+
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 700px) {
   .st-layout {
     grid-template-columns: 1fr;
+  }
+
+  .st-log-stats {
+    flex-wrap: wrap;
+  }
+
+  .st-log-stat {
+    flex: 1 1 calc(50% - 1px);
+    min-width: 0;
+  }
+
+  .st-log-subject {
+    display: none;
+  }
+
+  .st-log-filters {
+    padding: 0.6rem 1rem;
+  }
+
+  .st-logs-list {
+    padding: 0.6rem 1rem 1rem;
   }
 }

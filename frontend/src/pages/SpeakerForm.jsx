@@ -1,42 +1,36 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Upload, Save, CheckCircle, Plus, X, AlertCircle, Link2 } from 'lucide-react';
+import { ArrowLeft, Upload, Save, CheckCircle, Plus, X, AlertCircle, Link2, Image } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
+import MediaPicker from '../components/MediaPicker';
 import './SpeakerForm.css';
 
 const PLATFORM_OPTIONS = ['Twitter', 'LinkedIn', 'Instagram', 'Facebook', 'YouTube', 'Website', 'GitHub', 'TikTok'];
-
-const REQUIRED_FIELDS = ['name', 'bio', 'company', 'talkTitle'];
-
+const REQUIRED_FIELDS  = ['name', 'bio', 'company', 'talkTitle'];
 const FIELD_LABELS = {
-  name:        'Full Name',
-  email:       'Email',
-  phone:       'Phone',
-  jobTitle:    'Job Title',
-  company:     'Company / Organization',
-  talkTitle:   'Talk Title',
-  bio:         'Short Bio',
-  description: 'Talk Description',
+  name: 'Full Name', email: 'Email', phone: 'Phone', jobTitle: 'Job Title',
+  company: 'Company / Organization', talkTitle: 'Talk Title', bio: 'Short Bio', description: 'Talk Description',
 };
 
 const SpeakerForm = () => {
-  const { id }     = useParams();
-  const navigate   = useNavigate();
-  const isEditing  = Boolean(id);
+  const { id }    = useParams();
+  const navigate  = useNavigate();
+  const isEditing = Boolean(id);
 
   const [formData, setFormData] = useState({
     name: '', email: '', phone: '', jobTitle: '',
     company: '', talkTitle: '', bio: '', description: '',
   });
 
-  const [socialLinks,   setSocialLinks]   = useState([]);
-  const [imageMode,     setImageMode]     = useState('url'); // 'url' | 'upload'
-  const [imageFile,     setImageFile]     = useState(null);
-  const [imageUrlInput, setImageUrlInput] = useState('');
-  const [imagePreview,  setImagePreview]  = useState(null);
-  const [loading,       setLoading]       = useState(false);
-  const [fetchLoading,  setFetchLoading]  = useState(isEditing);
-  const [errors,        setErrors]        = useState({});
+  const [socialLinks,     setSocialLinks]     = useState([]);
+  const [imageMode,       setImageMode]       = useState('url'); // 'url' | 'upload' | 'media'
+  const [imageFile,       setImageFile]       = useState(null);
+  const [imageUrlInput,   setImageUrlInput]   = useState('');
+  const [imagePreview,    setImagePreview]    = useState(null);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [loading,         setLoading]         = useState(false);
+  const [fetchLoading,    setFetchLoading]    = useState(isEditing);
+  const [errors,          setErrors]          = useState({});
 
   /* ── Load existing speaker when editing ─────────────── */
   useEffect(() => {
@@ -47,14 +41,9 @@ const SpeakerForm = () => {
         if (res.ok) {
           const data = await res.json();
           setFormData({
-            name:        data.name        || '',
-            email:       data.email       || '',
-            phone:       data.phone       || '',
-            jobTitle:    data.jobTitle    || '',
-            company:     data.company     || '',
-            talkTitle:   data.talkTitle   || '',
-            bio:         data.bio         || '',
-            description: data.description || '',
+            name: data.name || '', email: data.email || '', phone: data.phone || '',
+            jobTitle: data.jobTitle || '', company: data.company || '',
+            talkTitle: data.talkTitle || '', bio: data.bio || '', description: data.description || '',
           });
           if (data.imageUrl) {
             setImagePreview(data.imageUrl);
@@ -73,7 +62,7 @@ const SpeakerForm = () => {
     })();
   }, [id, isEditing]);
 
-  /* ── Field handlers ──────────────────────────────────── */
+  /* ── Handlers ────────────────────────────────────────── */
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -89,51 +78,34 @@ const SpeakerForm = () => {
 
   const handleImageUrlChange = (e) => setImageUrlInput(e.target.value);
 
-  /* ── Social links ────────────────────────────────────── */
   const addSocialLink    = () => setSocialLinks(prev => [...prev, { platform: 'Twitter', url: '' }]);
   const removeSocialLink = (i) => setSocialLinks(prev => prev.filter((_, idx) => idx !== i));
-  const updateSocialLink = (i, field, value) => {
+  const updateSocialLink = (i, field, value) =>
     setSocialLinks(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: value } : l));
-  };
 
-  /* ── Validation — only core fields required ─────────── */
+  /* ── Validation ──────────────────────────────────────── */
   const validate = () => {
     const errs = {};
-
     REQUIRED_FIELDS.forEach(field => {
-      if (!formData[field].trim()) {
-        errs[field] = `${FIELD_LABELS[field]} is required`;
-      }
+      if (!formData[field].trim()) errs[field] = `${FIELD_LABELS[field]} is required`;
     });
-
-    // Email format — only if an (optional) email was entered
-    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email))
       errs.email = 'Enter a valid email address';
-    }
-
-    // Social link URLs must not be empty if added
     socialLinks.forEach((link, i) => {
-      if (!link.url.trim()) {
-        errs[`social_${i}`] = 'URL is required';
-      }
+      if (!link.url.trim()) errs[`social_${i}`] = 'URL is required';
     });
-
     return errs;
   };
 
   /* ── Submit ──────────────────────────────────────────── */
   const handleSubmit = async (e, targetStatus) => {
     e.preventDefault();
-
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      // Scroll to first error
-      const firstErrEl = document.querySelector('.input-error, .field-error');
-      firstErrEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.querySelector('.input-error, .field-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-
     setLoading(true);
     try {
       const body = new FormData();
@@ -145,12 +117,10 @@ const SpeakerForm = () => {
       } else {
         body.append('imageUrl', imageUrlInput.trim());
       }
-
       const res = await authFetch(
         isEditing ? `/api/speakers/${id}` : '/api/speakers',
         { method: isEditing ? 'PUT' : 'POST', body }
       );
-
       if (!res.ok) throw new Error('Failed to save speaker');
       navigate('/speakers');
     } catch (err) {
@@ -163,11 +133,24 @@ const SpeakerForm = () => {
 
   if (fetchLoading) return <div className="loading-state">Loading speaker…</div>;
 
-  const previewSrc = imageMode === 'url' ? (imageUrlInput.trim() || null) : imagePreview;
+  const previewSrc = imageMode === 'upload' ? imagePreview : (imageUrlInput.trim() || null);
 
   /* ── Render ──────────────────────────────────────────── */
   return (
     <div className="speaker-form-page">
+
+      {/* Media Picker Modal */}
+      {showMediaPicker && (
+        <MediaPicker
+          onSelect={(item) => {
+            setImageUrlInput(item.url);
+            setImagePreview(item.url);
+            setImageMode('media');
+            setShowMediaPicker(false);
+          }}
+          onClose={() => setShowMediaPicker(false)}
+        />
+      )}
 
       {/* Header */}
       <div className="form-page-header">
@@ -182,25 +165,12 @@ const SpeakerForm = () => {
             </p>
           </div>
         </div>
-
         <div className="form-actions">
-          <button
-            type="button"
-            className="btn secondary"
-            onClick={e => handleSubmit(e, 'DRAFT')}
-            disabled={loading}
-          >
-            <Save size={15} />
-            {loading ? 'Saving…' : 'Save as Draft'}
+          <button type="button" className="btn secondary" onClick={e => handleSubmit(e, 'DRAFT')} disabled={loading}>
+            <Save size={15} />{loading ? 'Saving…' : 'Save as Draft'}
           </button>
-          <button
-            type="button"
-            className="btn primary"
-            onClick={e => handleSubmit(e, 'LIVE')}
-            disabled={loading}
-          >
-            <CheckCircle size={15} />
-            Publish Live
+          <button type="button" className="btn primary" onClick={e => handleSubmit(e, 'LIVE')} disabled={loading}>
+            <CheckCircle size={15} />Publish Live
           </button>
         </div>
       </div>
@@ -214,18 +184,14 @@ const SpeakerForm = () => {
           <div className="field-row two-col">
             <div className="form-group">
               <label>Full Name <span className="required">*</span></label>
-              <input
-                type="text" name="name" value={formData.name} onChange={handleChange}
-                placeholder="Jane Doe" className={errors.name ? 'input-error' : ''}
-              />
+              <input type="text" name="name" value={formData.name} onChange={handleChange}
+                placeholder="Jane Doe" className={errors.name ? 'input-error' : ''} />
               {errors.name && <span className="field-error"><AlertCircle size={12} />{errors.name}</span>}
             </div>
             <div className="form-group">
               <label>Email <span className="optional">(optional)</span></label>
-              <input
-                type="email" name="email" value={formData.email} onChange={handleChange}
-                placeholder="jane@example.com" className={errors.email ? 'input-error' : ''}
-              />
+              <input type="email" name="email" value={formData.email} onChange={handleChange}
+                placeholder="jane@example.com" className={errors.email ? 'input-error' : ''} />
               {errors.email && <span className="field-error"><AlertCircle size={12} />{errors.email}</span>}
             </div>
           </div>
@@ -233,38 +199,30 @@ const SpeakerForm = () => {
           <div className="field-row two-col">
             <div className="form-group">
               <label>Job Title <span className="optional">(optional)</span></label>
-              <input
-                type="text" name="jobTitle" value={formData.jobTitle} onChange={handleChange}
-                placeholder="e.g. CEO, Researcher, Activist" className={errors.jobTitle ? 'input-error' : ''}
-              />
+              <input type="text" name="jobTitle" value={formData.jobTitle} onChange={handleChange}
+                placeholder="e.g. CEO, Researcher, Activist" className={errors.jobTitle ? 'input-error' : ''} />
               {errors.jobTitle && <span className="field-error"><AlertCircle size={12} />{errors.jobTitle}</span>}
             </div>
             <div className="form-group">
               <label>Company / Organization <span className="required">*</span></label>
-              <input
-                type="text" name="company" value={formData.company} onChange={handleChange}
-                placeholder="e.g. Google, MIT, UNICEF" className={errors.company ? 'input-error' : ''}
-              />
+              <input type="text" name="company" value={formData.company} onChange={handleChange}
+                placeholder="e.g. Google, MIT, UNICEF" className={errors.company ? 'input-error' : ''} />
               {errors.company && <span className="field-error"><AlertCircle size={12} />{errors.company}</span>}
             </div>
           </div>
 
           <div className="form-group">
             <label>Phone <span className="optional">(optional)</span></label>
-            <input
-              type="tel" name="phone" value={formData.phone} onChange={handleChange}
-              placeholder="+1 (555) 000-0000" className={errors.phone ? 'input-error' : ''}
-            />
+            <input type="tel" name="phone" value={formData.phone} onChange={handleChange}
+              placeholder="+1 (555) 000-0000" className={errors.phone ? 'input-error' : ''} />
             {errors.phone && <span className="field-error"><AlertCircle size={12} />{errors.phone}</span>}
           </div>
 
           <div className="form-group">
             <label>Short Bio <span className="required">*</span></label>
-            <textarea
-              name="bio" value={formData.bio} onChange={handleChange}
+            <textarea name="bio" value={formData.bio} onChange={handleChange}
               placeholder="A brief introduction about the speaker (shown on speaker cards)…"
-              rows="3" className={errors.bio ? 'input-error' : ''}
-            />
+              rows="3" className={errors.bio ? 'input-error' : ''} />
             {errors.bio && <span className="field-error"><AlertCircle size={12} />{errors.bio}</span>}
           </div>
         </div>
@@ -278,54 +236,73 @@ const SpeakerForm = () => {
               Speaker Photo <span className="optional">(optional)</span>
             </h3>
 
+            {/* Three-way tab */}
             <div className="image-mode-tabs">
-              <button
-                type="button"
+              <button type="button"
                 className={`image-mode-tab ${imageMode === 'url' ? 'active' : ''}`}
-                onClick={() => setImageMode('url')}
-              >
+                onClick={() => setImageMode('url')}>
                 <Link2 size={13} /> Image URL
               </button>
-              <button
-                type="button"
+              <button type="button"
                 className={`image-mode-tab ${imageMode === 'upload' ? 'active' : ''}`}
-                onClick={() => setImageMode('upload')}
-              >
+                onClick={() => setImageMode('upload')}>
                 <Upload size={13} /> Upload
+              </button>
+              <button type="button"
+                className={`image-mode-tab ${imageMode === 'media' ? 'active' : ''}`}
+                onClick={() => setShowMediaPicker(true)}>
+                <Image size={13} /> Media
               </button>
             </div>
 
-            {imageMode === 'url' ? (
+            {/* URL tab */}
+            {imageMode === 'url' && (
               <>
-                <input
-                  type="url"
-                  value={imageUrlInput}
-                  onChange={handleImageUrlChange}
-                  placeholder="https://example.com/photo.jpg"
-                />
+                <input type="url" value={imageUrlInput} onChange={handleImageUrlChange}
+                  placeholder="https://example.com/photo.jpg" />
                 {previewSrc && (
                   <div className="image-preview url-preview">
-                    <img
-                      src={previewSrc}
-                      alt="Preview"
-                      onError={e => { e.currentTarget.parentElement.classList.add('broken'); }}
-                      onLoad={e => { e.currentTarget.parentElement.classList.remove('broken'); }}
-                    />
-                    <span className="broken-hint">Image URL can’t be loaded</span>
+                    <img src={previewSrc} alt="Preview"
+                      onError={e => e.currentTarget.parentElement.classList.add('broken')}
+                      onLoad={e => e.currentTarget.parentElement.classList.remove('broken')} />
+                    <span className="broken-hint">Image URL can't be loaded</span>
                   </div>
                 )}
               </>
-            ) : (
+            )}
+
+            {/* Media tab */}
+            {imageMode === 'media' && (
+              <>
+                <div className="media-selected-row">
+                  <span className="media-selected-label">
+                    {imageUrlInput ? 'Selected from Media Library' : 'No image selected yet'}
+                  </span>
+                  <button type="button" className="btn secondary small-btn"
+                    onClick={() => setShowMediaPicker(true)}>
+                    {imageUrlInput ? 'Change' : 'Browse Media'}
+                  </button>
+                </div>
+                {previewSrc && (
+                  <div className="image-preview url-preview" style={{ marginTop: '0.75rem' }}>
+                    <img src={previewSrc} alt="Preview"
+                      onError={e => e.currentTarget.parentElement.classList.add('broken')}
+                      onLoad={e => e.currentTarget.parentElement.classList.remove('broken')} />
+                    <span className="broken-hint">Image can't be loaded</span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Upload tab */}
+            {imageMode === 'upload' && (
               <div className="image-upload-zone">
                 {previewSrc ? (
                   <div className="image-preview">
                     <img src={previewSrc} alt="Preview" />
                     <div className="image-overlay">
-                      <button
-                        type="button"
-                        className="btn secondary"
-                        onClick={() => document.getElementById('image-upload').click()}
-                      >
+                      <button type="button" className="btn secondary"
+                        onClick={() => document.getElementById('image-upload').click()}>
                         Change Photo
                       </button>
                     </div>
@@ -337,10 +314,8 @@ const SpeakerForm = () => {
                     <small>PNG, JPG — high resolution preferred</small>
                   </label>
                 )}
-                <input
-                  type="file" id="image-upload" accept="image/*"
-                  onChange={handleImageChange} style={{ display: 'none' }}
-                />
+                <input type="file" id="image-upload" accept="image/*"
+                  onChange={handleImageChange} style={{ display: 'none' }} />
               </div>
             )}
           </div>
@@ -353,28 +328,18 @@ const SpeakerForm = () => {
                 <Plus size={13} /> Add Link
               </button>
             </div>
-
-            {socialLinks.length === 0 && (
-              <p className="empty-hint">No social links added yet.</p>
-            )}
-
+            {socialLinks.length === 0 && <p className="empty-hint">No social links added yet.</p>}
             <div className="social-links-list">
               {socialLinks.map((link, i) => (
                 <div key={i} className="social-link-row">
-                  <select
-                    value={link.platform}
-                    onChange={e => updateSocialLink(i, 'platform', e.target.value)}
-                  >
+                  <select value={link.platform} onChange={e => updateSocialLink(i, 'platform', e.target.value)}>
                     {PLATFORM_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                   <div style={{ flex: 1 }}>
-                    <input
-                      type="url"
-                      value={link.url}
+                    <input type="url" value={link.url}
                       onChange={e => updateSocialLink(i, 'url', e.target.value)}
                       placeholder="https://…"
-                      className={errors[`social_${i}`] ? 'input-error' : ''}
-                    />
+                      className={errors[`social_${i}`] ? 'input-error' : ''} />
                     {errors[`social_${i}`] && (
                       <span className="field-error" style={{ marginTop: '4px' }}>
                         <AlertCircle size={12} />{errors[`social_${i}`]}
@@ -393,24 +358,18 @@ const SpeakerForm = () => {
         {/* ── Full Width: Talk Details ─────────────────── */}
         <div className="form-section card full-width">
           <h3 className="section-heading">Talk Details</h3>
-
           <div className="form-group">
             <label>Talk Title <span className="required">*</span></label>
-            <input
-              type="text" name="talkTitle" value={formData.talkTitle} onChange={handleChange}
+            <input type="text" name="talkTitle" value={formData.talkTitle} onChange={handleChange}
               placeholder="e.g. The Future of Sustainable Innovation"
-              className={errors.talkTitle ? 'input-error' : ''}
-            />
+              className={errors.talkTitle ? 'input-error' : ''} />
             {errors.talkTitle && <span className="field-error"><AlertCircle size={12} />{errors.talkTitle}</span>}
           </div>
-
           <div className="form-group">
             <label>Talk Description <span className="optional">(optional)</span></label>
-            <textarea
-              name="description" value={formData.description} onChange={handleChange}
+            <textarea name="description" value={formData.description} onChange={handleChange}
               placeholder="Describe what this talk will cover, key themes, and what the audience will learn…"
-              rows="6" className={errors.description ? 'input-error' : ''}
-            />
+              rows="6" className={errors.description ? 'input-error' : ''} />
             {errors.description && <span className="field-error"><AlertCircle size={12} />{errors.description}</span>}
           </div>
         </div>

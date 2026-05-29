@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Users, LogOut, Settings, LayoutDashboard, Code, X } from 'lucide-react';
+import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon } from 'lucide-react';
 import './Sidebar.css';
 
-const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
+const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -34,17 +34,27 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             </NavLink>
           </li>
           <li>
-            <NavLink to="/api-docs" className="nav-item" onClick={onClose}>
-              <Code size={18} />
-              <span>API Docs</span>
+            <NavLink to="/media" className="nav-item" onClick={onClose}>
+              <ImageIcon size={18} />
+              <span>Media</span>
             </NavLink>
           </li>
-          <li>
-            <NavLink to="/settings" className="nav-item" onClick={onClose}>
-              <Settings size={18} />
-              <span>Settings</span>
-            </NavLink>
-          </li>
+          {isAdmin && (
+            <li>
+              <NavLink to="/api-docs" className="nav-item" onClick={onClose}>
+                <Code size={18} />
+                <span>API Docs</span>
+              </NavLink>
+            </li>
+          )}
+          {isAdmin && (
+            <li>
+              <NavLink to="/settings" className="nav-item" onClick={onClose}>
+                <Settings size={18} />
+                <span>Settings</span>
+              </NavLink>
+            </li>
+          )}
         </ul>
       </nav>
 
