@@ -69,6 +69,17 @@ npx prisma generate
 npx prisma db push        # creates server/prisma/dev.db
 ```
 
+**Seed the initial users (interactive):**
+
+```bash
+chmod +x setup-users.sh
+./setup-users.sh
+```
+
+The script will prompt you for usernames and passwords. Press Enter to accept the defaults in brackets.
+
+> **Security:** Passwords are never stored in files or git — only in the database as bcrypt hashes.
+
 ---
 
 ## 3. Build the frontend
