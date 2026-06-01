@@ -201,6 +201,18 @@
   background-color: rgba(239, 68, 68, 0.4);
 }
 
+/* The global `button` rule adds large em-based padding; these are fixed
+   32×32 icon buttons, so reset it or the icon's box collapses to nothing. */
+.media-view-btn,
+.media-copy-btn,
+.media-delete-btn {
+  padding: 0;
+}
+
+.media-thumb-overlay svg {
+  flex-shrink: 0;
+}
+
 /* ── Info ─────────────────────────────────────────────────── */
 .media-info {
   padding: 0.65rem 0.75rem;
