@@ -422,6 +422,88 @@ app.delete('/api/media/:id', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
+// LINK SHORTENER + QR  (proxied to the external tedxyola.com service)
+// ══════════════════════════════════════════════════════════
+// The external admin API requires a secret API key. We keep that key on the
+// server (process.env.API_KEY) and proxy requests through here so it is never
+// exposed to the browser. These routes reuse the dashboard's own JWT auth.
+// The QR endpoint is public, so the frontend loads those images directly.
+const LINKS_API = 'https://tedxyola.com/api/admin/links';
+
+const linksHeaders = () => ({
+  Authorization: `Bearer ${process.env.API_KEY}`,
+  'Content-Type': 'application/json',
+});
+
+// GET /api/links — list all short links
+app.get('/api/links', requireAuth, async (req, res) => {
+  if (!process.env.API_KEY) return res.status(500).json({ error: 'Link service API key not configured' });
+  try {
+    const r    = await fetch(LINKS_API, { headers: linksHeaders() });
+    const data = await r.json().catch(() => ({}));
+    res.status(r.status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Failed to reach link service' });
+  }
+});
+
+// POST /api/links — create a short link  { url, slug? }
+app.post('/api/links', requireAuth, async (req, res) => {
+  if (!process.env.API_KEY) return res.status(500).json({ error: 'Link service API key not configured' });
+  const { url, slug } = req.body;
+  if (!url) return res.status(400).json({ error: 'A target URL is required' });
+  try {
+    const r    = await fetch(LINKS_API, {
+      method:  'POST',
+      headers: linksHeaders(),
+      body:    JSON.stringify(slug ? { url, slug } : { url }),
+    });
+    const data = await r.json().catch(() => ({}));
+
+    if (r.ok) {
+      await prisma.activity.create({
+        data: {
+          userId:  req.user.userId,
+          action:  'CREATE_LINK',
+          details: JSON.stringify({ slug: data?.slug || slug, url }),
+        },
+      });
+    }
+    res.status(r.status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Failed to reach link service' });
+  }
+});
+
+// DELETE /api/links/:slug — remove a short link
+app.delete('/api/links/:slug', requireAuth, async (req, res) => {
+  if (!process.env.API_KEY) return res.status(500).json({ error: 'Link service API key not configured' });
+  try {
+    const r    = await fetch(`${LINKS_API}/${encodeURIComponent(req.params.slug)}`, {
+      method:  'DELETE',
+      headers: linksHeaders(),
+    });
+    const data = await r.json().catch(() => ({}));
+
+    if (r.ok) {
+      await prisma.activity.create({
+        data: {
+          userId:  req.user.userId,
+          action:  'DELETE_LINK',
+          details: JSON.stringify({ slug: req.params.slug }),
+        },
+      });
+    }
+    res.status(r.status).json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(502).json({ error: 'Failed to reach link service' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
 // SERVE FRONTEND  (production build, if present)
 // ══════════════════════════════════════════════════════════
 // In production the backend also serves the compiled React app, so a single

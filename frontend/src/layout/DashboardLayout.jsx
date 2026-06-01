@@ -9,6 +9,7 @@ const PAGE_TITLES = {
   '/speakers': 'Speakers',
   '/speakers/new': 'Add Speaker',
   '/media': 'Media Library',
+  '/links': 'Links & QR Codes',
   '/api-docs': 'API Documentation',
   '/settings': 'Settings',
 };

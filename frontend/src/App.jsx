@@ -7,6 +7,7 @@ import SpeakerForm from './pages/SpeakerForm';
 import Settings from './pages/Settings';
 import ApiDocs from './pages/ApiDocs';
 import Media from './pages/Media';
+import Links from './pages/Links';
 import './App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -46,6 +47,7 @@ function App() {
           <Route path="speakers/new" element={<SpeakerForm />} />
           <Route path="speakers/edit/:id" element={<SpeakerForm />} />
           <Route path="media" element={<Media />} />
+          <Route path="links" element={<Links />} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
         </Route>
