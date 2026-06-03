@@ -285,6 +285,27 @@ all.forEach(s => {
           </div>
         </div>
 
+        <h4 className="ad-h4">Public Endpoints (No Authentication)</h4>
+
+        <div className="ad-endpoint-list">
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/public/sponsors</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve all LIVE sponsors — for use on the public website</p>
+            <small className="ad-note">Query: q (search name/description), sort (newest/oldest/name), limit (1–100), offset</small>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/public/sponsors/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve a single LIVE sponsor by ID (404 if not found or not LIVE)</p>
+          </div>
+        </div>
+
         <h4 className="ad-h4">Protected Endpoints (Authentication Required)</h4>
         
         <div className="ad-endpoint-list">

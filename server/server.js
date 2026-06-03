@@ -224,6 +224,76 @@ app.get('/api/public/speakers/:id', async (req, res) => {
   }
 });
 
+// GET /api/public/sponsors — only LIVE sponsors, safe fields only
+// Optional query filters:
+//   q      partial, case-insensitive match on name or description
+//   sort   newest (default) | oldest | name
+//   limit  max results, 1–100 (omit for all)
+//   offset number of results to skip (pagination)
+app.get('/api/public/sponsors', async (req, res) => {
+  try {
+    const { q, sort = 'newest', limit, offset } = req.query;
+
+    const where = { status: 'LIVE' };
+    if (q) {
+      const term = String(q);
+      where.OR = [
+        { name:        { contains: term } },
+        { description: { contains: term } },
+      ];
+    }
+
+    const orderBy =
+      sort === 'oldest' ? { createdAt: 'asc' } :
+      sort === 'name'   ? { name: 'asc' }      :
+                          { createdAt: 'desc' };
+
+    const take = limit  !== undefined ? Math.min(Math.max(parseInt(limit,  10) || 0, 0), 100) || undefined : undefined;
+    const skip = offset !== undefined ? Math.max(parseInt(offset, 10) || 0, 0) : undefined;
+
+    const sponsors = await prisma.sponsor.findMany({
+      where,
+      orderBy,
+      ...(take !== undefined ? { take } : {}),
+      ...(skip !== undefined ? { skip } : {}),
+      select: {
+        id:          true,
+        name:        true,
+        description: true,
+        imageUrl:    true,
+        website:     true,
+        createdAt:   true,
+      },
+    });
+    res.json(sponsors);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch sponsors' });
+  }
+});
+
+// GET /api/public/sponsors/:id — single LIVE sponsor, safe fields only
+app.get('/api/public/sponsors/:id', async (req, res) => {
+  try {
+    const sponsor = await prisma.sponsor.findFirst({
+      where: { id: req.params.id, status: 'LIVE' },
+      select: {
+        id:          true,
+        name:        true,
+        description: true,
+        imageUrl:    true,
+        website:     true,
+        createdAt:   true,
+      },
+    });
+    if (!sponsor) return res.status(404).json({ error: 'Sponsor not found' });
+    res.json(sponsor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch sponsor' });
+  }
+});
+
 // ══════════════════════════════════════════════════════════
 // SPEAKER ROUTES  (all protected)
 // ══════════════════════════════════════════════════════════
