@@ -294,6 +294,82 @@ app.get('/api/public/sponsors/:id', async (req, res) => {
   }
 });
 
+// GET /api/public/blogs — only LIVE blog posts, safe fields only
+// Optional query filters:
+//   q        partial, case-insensitive match on title or content
+//   category filter by category (exact)
+//   sort     newest (default) | oldest | title
+//   limit    max results, 1–100 (omit for all)
+//   offset   number of results to skip (pagination)
+app.get('/api/public/blogs', async (req, res) => {
+  try {
+    const { q, category, sort = 'newest', limit, offset } = req.query;
+
+    const where = { status: 'LIVE' };
+    if (category) where.category = String(category);
+    if (q) {
+      const term = String(q);
+      where.OR = [
+        { title:   { contains: term } },
+        { content: { contains: term } },
+      ];
+    }
+
+    const orderBy =
+      sort === 'oldest' ? { publishDate: 'asc' } :
+      sort === 'title'  ? { title: 'asc' }       :
+                          { publishDate: 'desc' };
+
+    const take = limit  !== undefined ? Math.min(Math.max(parseInt(limit,  10) || 0, 0), 100) || undefined : undefined;
+    const skip = offset !== undefined ? Math.max(parseInt(offset, 10) || 0, 0) : undefined;
+
+    const blogs = await prisma.blog.findMany({
+      where,
+      orderBy,
+      ...(take !== undefined ? { take } : {}),
+      ...(skip !== undefined ? { skip } : {}),
+      select: {
+        id:          true,
+        title:       true,
+        content:     true,
+        category:    true,
+        author:      true,
+        imageUrl:    true,
+        publishDate: true,
+        createdAt:   true,
+      },
+    });
+    res.json(blogs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch blogs' });
+  }
+});
+
+// GET /api/public/blogs/:id — single LIVE blog post, safe fields only
+app.get('/api/public/blogs/:id', async (req, res) => {
+  try {
+    const blog = await prisma.blog.findFirst({
+      where: { id: req.params.id, status: 'LIVE' },
+      select: {
+        id:          true,
+        title:       true,
+        content:     true,
+        category:    true,
+        author:      true,
+        imageUrl:    true,
+        publishDate: true,
+        createdAt:   true,
+      },
+    });
+    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    res.json(blog);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch blog' });
+  }
+});
+
 // ══════════════════════════════════════════════════════════
 // SPEAKER ROUTES  (all protected)
 // ══════════════════════════════════════════════════════════

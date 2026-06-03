@@ -415,6 +415,27 @@ all.forEach(s => {
           </div>
         </div>
 
+        <h4 className="ad-h4">Public Endpoints (No Authentication)</h4>
+
+        <div className="ad-endpoint-list">
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/public/blogs</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve all LIVE blog posts — for use on the public website</p>
+            <small className="ad-note">Query: q (search title/content), category, sort (newest/oldest/title), limit (1–100), offset</small>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/public/blogs/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve a single LIVE blog post by ID (404 if not found or not LIVE)</p>
+          </div>
+        </div>
+
         <h4 className="ad-h4">Protected Endpoints (Authentication Required)</h4>
         
         <div className="ad-endpoint-list">
