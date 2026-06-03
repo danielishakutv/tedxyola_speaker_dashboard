@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon } from 'lucide-react';
+import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon, Building, FileText } from 'lucide-react';
 import './Sidebar.css';
 
 const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
@@ -31,6 +31,18 @@ const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
             <NavLink to="/speakers" className="nav-item" onClick={onClose}>
               <Users size={18} />
               <span>Speakers</span>
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/sponsors" className="nav-item" onClick={onClose}>
+              <Building size={18} />
+              <span>Sponsors</span>
+            </NavLink>
+          </li>
+          <li>
+            <NavLink to="/blogs" className="nav-item" onClick={onClose}>
+              <FileText size={18} />
+              <span>Blogs</span>
             </NavLink>
           </li>
           <li>

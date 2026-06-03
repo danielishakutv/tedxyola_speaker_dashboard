@@ -269,6 +269,150 @@ all.forEach(s => {
               />
         )}
       </section>
+
+      {/* ══════════════════════════════════════════════════ */}
+      {/* SPONSORS API DOCUMENTATION                         */}
+      {/* ══════════════════════════════════════════════════ */}
+
+      <section className="ad-card card" style={{ marginTop: '2rem' }}>
+        <div className="ad-card-head">
+          <div className="ad-card-icon" style={{ background: 'rgba(59,130,246,0.12)', color: '#3b82f6' }}>
+            <List size={16} />
+          </div>
+          <div>
+            <h3>Sponsors Endpoints</h3>
+            <p>Manage and retrieve sponsor information for your event.</p>
+          </div>
+        </div>
+
+        <h4 className="ad-h4">Protected Endpoints (Authentication Required)</h4>
+        
+        <div className="ad-endpoint-list">
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/sponsors</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve all sponsors (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/sponsors/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve a single sponsor by ID (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method post">POST</span>
+              <code className="ad-ep-path">/api/sponsors</code>
+            </div>
+            <p className="ad-endpoint-desc">Create a new sponsor (admin only)</p>
+            <small className="ad-note">Body: name (required), description, website, imageUrl or image file, status (DRAFT/LIVE)</small>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method put">PUT</span>
+              <code className="ad-ep-path">/api/sponsors/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Update an existing sponsor (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method delete">DELETE</span>
+              <code className="ad-ep-path">/api/sponsors/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Delete a sponsor (admin only)</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════ */}
+      {/* BLOG API DOCUMENTATION                             */}
+      {/* ══════════════════════════════════════════════════ */}
+
+      <section className="ad-card card" style={{ marginTop: '2rem' }}>
+        <div className="ad-card-head">
+          <div className="ad-card-icon" style={{ background: 'rgba(168,85,247,0.12)', color: '#a855f7' }}>
+            <FileText size={16} />
+          </div>
+          <div>
+            <h3>Blog Endpoints</h3>
+            <p>Create and manage blog posts for your event.</p>
+          </div>
+        </div>
+
+        <h4 className="ad-h4">Protected Endpoints (Authentication Required)</h4>
+        
+        <div className="ad-endpoint-list">
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/blogs</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve all blog posts (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/blogs/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve a single blog post by ID (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method post">POST</span>
+              <code className="ad-ep-path">/api/blogs</code>
+            </div>
+            <p className="ad-endpoint-desc">Create a new blog post (admin only)</p>
+            <small className="ad-note">Body: title (required), content (required), category (required), author (required), publishDate, status (DRAFT/LIVE)</small>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method put">PUT</span>
+              <code className="ad-ep-path">/api/blogs/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Update an existing blog post (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method delete">DELETE</span>
+              <code className="ad-ep-path">/api/blogs/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Delete a blog post (admin only)</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════ */}
+      {/* ACTIVITY LOGS                                      */}
+      {/* ══════════════════════════════════════════════════ */}
+
+      <section className="ad-card card" style={{ marginTop: '2rem' }}>
+        <div className="ad-card-head">
+          <div className="ad-card-icon" style={{ background: 'rgba(34,197,94,0.12)', color: '#22c55e' }}>
+            <List size={16} />
+          </div>
+          <div>
+            <h3>Activity Logs</h3>
+            <p>All create, update, and delete operations are automatically logged with user information.</p>
+          </div>
+        </div>
+
+        <div className="ad-notes">
+          <span className="ad-note"><Check size={12} /> CREATE_SPONSOR / UPDATE_SPONSOR / DELETE_SPONSOR</span>
+          <span className="ad-note"><Check size={12} /> CREATE_BLOG / UPDATE_BLOG / DELETE_BLOG</span>
+          <span className="ad-note"><Check size={12} /> Logs include timestamp, user, and affected resource details</span>
+        </div>
+      </section>
     </div>
   );
 };

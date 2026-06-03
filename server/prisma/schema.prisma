@@ -53,3 +53,26 @@ model Activity {
   details   String?  // JSON stringified details
   timestamp DateTime @default(now())
 }
+
+model Sponsor {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  imageUrl    String?
+  website     String?
+  status      String   @default("DRAFT") // "DRAFT" or "LIVE"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Blog {
+  id          String   @id @default(uuid())
+  title       String
+  content     String   // Long text for blog post
+  category    String
+  author      String
+  publishDate DateTime @default(now())
+  status      String   @default("DRAFT") // "DRAFT" or "LIVE"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

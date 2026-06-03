@@ -54,7 +54,7 @@ const uploadToCloudinary = (buffer) =>
     reject(new Error('Cloudinary not configured'));
   });
 
-// ── JWT Auth Middleware ───────────────────────────────────
+// ── JWT Auth Middleware───────────────────────────────────
 const requireAuth = (req, res, next) => {
   const header = req.headers.authorization;
   if (!header || !header.startsWith('Bearer ')) {
@@ -418,6 +418,228 @@ app.delete('/api/media/:id', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete media' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// SPONSOR ROUTES  (all protected)
+// ══════════════════════════════════════════════════════════
+
+// GET all sponsors
+app.get('/api/sponsors', requireAuth, async (req, res) => {
+  try {
+    const sponsors = await prisma.sponsor.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(sponsors);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch sponsors' });
+  }
+});
+
+// GET single sponsor
+app.get('/api/sponsors/:id', requireAuth, async (req, res) => {
+  try {
+    const sponsor = await prisma.sponsor.findUnique({ where: { id: req.params.id } });
+    if (!sponsor) return res.status(404).json({ error: 'Sponsor not found' });
+    res.json(sponsor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch sponsor' });
+  }
+});
+
+// POST new sponsor
+app.post('/api/sponsors', requireAuth, upload.single('image'), async (req, res) => {
+  try {
+    const { name, description, website, status, imageUrl: imageUrlInput } = req.body;
+    let imageUrl = imageUrlInput?.trim() || null;
+
+    if (req.file) {
+      const ext      = path.extname(req.file.originalname).toLowerCase();
+      const filename = `${uuidv4()}${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+      const proto    = req.headers['x-forwarded-proto'] || req.protocol;
+      const host     = req.headers['x-forwarded-host']  || req.get('host');
+      imageUrl = `${proto}://${host}/uploads/${filename}`;
+    }
+
+    const sponsor = await prisma.sponsor.create({
+      data: { name, description, website, imageUrl, status: status || 'DRAFT' },
+    });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'CREATE_SPONSOR',
+        details: JSON.stringify({ sponsorId: sponsor.id, sponsorName: name })
+      }
+    });
+
+    res.status(201).json(sponsor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create sponsor' });
+  }
+});
+
+// PUT update sponsor
+app.put('/api/sponsors/:id', requireAuth, upload.single('image'), async (req, res) => {
+  try {
+    const { name, description, website, status, imageUrl: imageUrlInput } = req.body;
+    const data = { name, description, website, status };
+
+    if (req.file) {
+      const ext      = path.extname(req.file.originalname).toLowerCase();
+      const filename = `${uuidv4()}${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+      const proto    = req.headers['x-forwarded-proto'] || req.protocol;
+      const host     = req.headers['x-forwarded-host']  || req.get('host');
+      data.imageUrl  = `${proto}://${host}/uploads/${filename}`;
+    } else if (imageUrlInput !== undefined) {
+      data.imageUrl = imageUrlInput.trim() || null;
+    }
+
+    const sponsor = await prisma.sponsor.update({ where: { id: req.params.id }, data });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'UPDATE_SPONSOR',
+        details: JSON.stringify({ sponsorId: sponsor.id, sponsorName: name })
+      }
+    });
+
+    res.json(sponsor);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update sponsor' });
+  }
+});
+
+// DELETE sponsor
+app.delete('/api/sponsors/:id', requireAuth, async (req, res) => {
+  try {
+    const sponsor = await prisma.sponsor.findUnique({ where: { id: req.params.id } });
+    await prisma.sponsor.delete({ where: { id: req.params.id } });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'DELETE_SPONSOR',
+        details: JSON.stringify({ sponsorId: req.params.id, sponsorName: sponsor?.name })
+      }
+    });
+
+    res.json({ message: 'Sponsor deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete sponsor' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// BLOG ROUTES  (all protected)
+// ══════════════════════════════════════════════════════════
+
+// GET all blogs
+app.get('/api/blogs', requireAuth, async (req, res) => {
+  try {
+    const blogs = await prisma.blog.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(blogs);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch blogs' });
+  }
+});
+
+// GET single blog
+app.get('/api/blogs/:id', requireAuth, async (req, res) => {
+  try {
+    const blog = await prisma.blog.findUnique({ where: { id: req.params.id } });
+    if (!blog) return res.status(404).json({ error: 'Blog not found' });
+    res.json(blog);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch blog' });
+  }
+});
+
+// POST new blog
+app.post('/api/blogs', requireAuth, async (req, res) => {
+  try {
+    const { title, content, category, author, publishDate, status } = req.body;
+
+    const blog = await prisma.blog.create({
+      data: {
+        title,
+        content,
+        category,
+        author,
+        publishDate: publishDate ? new Date(publishDate) : new Date(),
+        status: status || 'DRAFT'
+      },
+    });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'CREATE_BLOG',
+        details: JSON.stringify({ blogId: blog.id, blogTitle: title })
+      }
+    });
+
+    res.status(201).json(blog);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create blog' });
+  }
+});
+
+// PUT update blog
+app.put('/api/blogs/:id', requireAuth, async (req, res) => {
+  try {
+    const { title, content, category, author, publishDate, status } = req.body;
+    const data = { title, content, category, author, status };
+
+    if (publishDate !== undefined) {
+      data.publishDate = new Date(publishDate);
+    }
+
+    const blog = await prisma.blog.update({ where: { id: req.params.id }, data });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'UPDATE_BLOG',
+        details: JSON.stringify({ blogId: blog.id, blogTitle: title })
+      }
+    });
+
+    res.json(blog);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update blog' });
+  }
+});
+
+// DELETE blog
+app.delete('/api/blogs/:id', requireAuth, async (req, res) => {
+  try {
+    const blog = await prisma.blog.findUnique({ where: { id: req.params.id } });
+    await prisma.blog.delete({ where: { id: req.params.id } });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'DELETE_BLOG',
+        details: JSON.stringify({ blogId: req.params.id, blogTitle: blog?.title })
+      }
+    });
+
+    res.json({ message: 'Blog deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete blog' });
   }
 });
 

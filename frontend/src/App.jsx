@@ -4,6 +4,10 @@ import DashboardLayout from './layout/DashboardLayout';
 import Overview from './pages/Overview';
 import SpeakersList from './pages/SpeakersList';
 import SpeakerForm from './pages/SpeakerForm';
+import SponsorsList from './pages/SponsorsList';
+import SponsorForm from './pages/SponsorForm';
+import BlogsList from './pages/BlogsList';
+import BlogForm from './pages/BlogForm';
 import Settings from './pages/Settings';
 import ApiDocs from './pages/ApiDocs';
 import Media from './pages/Media';
@@ -45,6 +49,12 @@ function App() {
           <Route path="speakers" element={<SpeakersList />} />
           <Route path="speakers/new" element={<SpeakerForm />} />
           <Route path="speakers/edit/:id" element={<SpeakerForm />} />
+          <Route path="sponsors" element={<SponsorsList />} />
+          <Route path="sponsors/new" element={<SponsorForm />} />
+          <Route path="sponsors/edit/:id" element={<SponsorForm />} />
+          <Route path="blogs" element={<BlogsList />} />
+          <Route path="blogs/new" element={<BlogForm />} />
+          <Route path="blogs/edit/:id" element={<BlogForm />} />
           <Route path="media" element={<Media />} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
