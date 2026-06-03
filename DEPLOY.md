@@ -260,3 +260,5 @@ pm2 start server.js --name tedx-speaker
 pm2 save
 echo "=== API check ===";  curl -s http://127.0.0.1:5000/api/public/speakers
 echo; echo "=== frontend check ==="; curl -sI http://127.0.0.1:5000/ | head -n1
+
+
