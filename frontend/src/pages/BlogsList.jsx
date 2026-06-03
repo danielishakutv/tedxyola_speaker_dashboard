@@ -4,6 +4,13 @@ import { Plus, Edit2, Trash2, Search, FileText, Calendar, User } from 'lucide-re
 import { authFetch } from '../utils/authFetch';
 import './BlogsList.css';
 
+/* Strip HTML tags so the card preview shows plain text, not markup. */
+const stripHtml = (html) => {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html || '';
+  return (tmp.textContent || '').replace(/\s+/g, ' ').trim();
+};
+
 /* ── Skeleton Card ───────────────────────────────────────── */
 const SkeletonCard = () => (
   <div className="blog-card card sk-card">
@@ -147,6 +154,14 @@ const BlogsList = () => {
           {filteredBlogs.map(blog => (
             <div key={blog.id} className="blog-card card">
 
+              {/* ── Featured image ─────────────────────── */}
+              {blog.imageUrl && (
+                <div className="blog-card-image">
+                  <img src={blog.imageUrl} alt={blog.title} loading="lazy"
+                    onError={e => { e.currentTarget.parentElement.style.display = 'none'; }} />
+                </div>
+              )}
+
               {/* ── Header ─────────────────────────────── */}
               <div className="card-header">
                 <span className="blog-category">{blog.category}</span>
@@ -170,9 +185,10 @@ const BlogsList = () => {
 
               {/* ── Content Preview ────────────────────── */}
               <p className="blog-content-preview">
-                {blog.content.length > 150 
-                  ? `${blog.content.substring(0, 150)}…` 
-                  : blog.content}
+                {(() => {
+                  const text = stripHtml(blog.content);
+                  return text.length > 150 ? `${text.substring(0, 150)}…` : text;
+                })()}
               </p>
 
               {/* ── Footer ─────────────────────────────── */}

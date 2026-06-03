@@ -83,6 +83,54 @@ const RESPONSE_FIELDS = [
   ['createdAt',   'string',        'ISO 8601 timestamp'],
 ];
 
+const BLOG_FIELDS = [
+  ['title',       'string',        'Blog title (required)'],
+  ['content',     'string',        'Rich-text body as HTML (required)'],
+  ['category',    'string',        'Category label (required)'],
+  ['author',      'string',        'Author name (required)'],
+  ['imageUrl',    'string | null', 'Featured image URL. Provide this OR upload an image file.'],
+  ['image',       'file',          'Featured image upload (multipart only). Saved to /uploads and returned as imageUrl.'],
+  ['publishDate', 'string',        'ISO date; defaults to now'],
+  ['status',      'string',        'DRAFT (default) or LIVE'],
+];
+
+const blogJsonRequest = `POST /api/blogs
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "title": "Designing for the Future",
+  "content": "<h2>Why design matters</h2><p>Great design is <strong>invisible</strong>…</p><ul><li>Clarity</li><li>Empathy</li></ul>",
+  "category": "Design",
+  "author": "Jane Doe",
+  "imageUrl": "https://speaker.tedxyola.com/uploads/featured.jpg",
+  "publishDate": "2026-06-15",
+  "status": "LIVE"
+}`;
+
+const blogUploadRequest = `# Upload a featured image file with the post (multipart/form-data)
+curl -X POST https://speaker.tedxyola.com/api/blogs \\
+  -H "Authorization: Bearer <token>" \\
+  -F "title=Designing for the Future" \\
+  -F "content=<h2>Why design matters</h2><p>Great design is invisible…</p>" \\
+  -F "category=Design" \\
+  -F "author=Jane Doe" \\
+  -F "status=LIVE" \\
+  -F "image=@./featured.jpg"`;
+
+const blogResponseExample = `{
+  "id": "b2c1f0a4-9d3e-4c8b-2a1f-7e6d5c4b3a21",
+  "title": "Designing for the Future",
+  "content": "<h2>Why design matters</h2><p>Great design is <strong>invisible</strong>…</p>",
+  "category": "Design",
+  "author": "Jane Doe",
+  "imageUrl": "https://speaker.tedxyola.com/uploads/9f1c…e7.jpg",
+  "publishDate": "2026-06-15T00:00:00.000Z",
+  "status": "LIVE",
+  "createdAt": "2026-06-03T12:00:00.000Z",
+  "updatedAt": "2026-06-03T12:00:00.000Z"
+}`;
+
 const ApiDocs = () => {
   const [preview, setPreview] = useState({ state: 'loading', data: null });
 
@@ -392,7 +440,7 @@ all.forEach(s => {
               <code className="ad-ep-path">/api/blogs</code>
             </div>
             <p className="ad-endpoint-desc">Create a new blog post (admin only)</p>
-            <small className="ad-note">Body: title (required), content (required), category (required), author (required), publishDate, status (DRAFT/LIVE)</small>
+            <small className="ad-note">Accepts JSON or multipart/form-data. Fields: title*, content* (rich HTML), category*, author*, publishDate, status (DRAFT/LIVE), and a featured image as either imageUrl (string) or image (uploaded file).</small>
           </div>
 
           <div className="ad-endpoint-item">
@@ -401,6 +449,7 @@ all.forEach(s => {
               <code className="ad-ep-path">/api/blogs/:id</code>
             </div>
             <p className="ad-endpoint-desc">Update an existing blog post (admin only)</p>
+            <small className="ad-note">Same fields as POST. Send imageUrl to set/replace via URL, or an image file to upload a new one. Omit both to leave the current image unchanged.</small>
           </div>
 
           <div className="ad-endpoint-item">
@@ -411,6 +460,28 @@ all.forEach(s => {
             <p className="ad-endpoint-desc">Delete a blog post (admin only)</p>
           </div>
         </div>
+
+        <h4 className="ad-h4"><FileText size={13} /> Request body fields</h4>
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead>
+              <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              {BLOG_FIELDS.map(([name, type, desc]) => (
+                <tr key={name}>
+                  <td><code className="ad-inline">{name}</code></td>
+                  <td className="ad-type">{type}</td>
+                  <td>{desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <CodeBlock title="Sample request — create a blog (JSON, image via URL)" code={blogJsonRequest} />
+        <CodeBlock title="Sample request — create a blog (multipart, upload a file)" code={blogUploadRequest} />
+        <CodeBlock title="Sample response — 201 Created" code={blogResponseExample} />
       </section>
 
       {/* ══════════════════════════════════════════════════ */}

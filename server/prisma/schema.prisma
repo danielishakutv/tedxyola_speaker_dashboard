@@ -68,9 +68,10 @@ model Sponsor {
 model Blog {
   id          String   @id @default(uuid())
   title       String
-  content     String   // Long text for blog post
+  content     String   // Rich-text HTML for the blog body
   category    String
   author      String
+  imageUrl    String?  // Featured image (URL, uploaded file, or media-library pick)
   publishDate DateTime @default(now())
   status      String   @default("DRAFT") // "DRAFT" or "LIVE"
   createdAt   DateTime @default(now())

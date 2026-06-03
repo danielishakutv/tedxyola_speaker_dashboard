@@ -635,9 +635,19 @@ app.get('/api/blogs/:id', requireAuth, async (req, res) => {
 });
 
 // POST new blog
-app.post('/api/blogs', requireAuth, async (req, res) => {
+app.post('/api/blogs', requireAuth, upload.single('image'), async (req, res) => {
   try {
-    const { title, content, category, author, publishDate, status } = req.body;
+    const { title, content, category, author, publishDate, status, imageUrl: imageUrlInput } = req.body;
+    let imageUrl = imageUrlInput?.trim() || null;
+
+    if (req.file) {
+      const ext      = path.extname(req.file.originalname).toLowerCase();
+      const filename = `${uuidv4()}${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+      const proto    = req.headers['x-forwarded-proto'] || req.protocol;
+      const host     = req.headers['x-forwarded-host']  || req.get('host');
+      imageUrl = `${proto}://${host}/uploads/${filename}`;
+    }
 
     const blog = await prisma.blog.create({
       data: {
@@ -645,6 +655,7 @@ app.post('/api/blogs', requireAuth, async (req, res) => {
         content,
         category,
         author,
+        imageUrl,
         publishDate: publishDate ? new Date(publishDate) : new Date(),
         status: status || 'DRAFT'
       },
@@ -666,13 +677,24 @@ app.post('/api/blogs', requireAuth, async (req, res) => {
 });
 
 // PUT update blog
-app.put('/api/blogs/:id', requireAuth, async (req, res) => {
+app.put('/api/blogs/:id', requireAuth, upload.single('image'), async (req, res) => {
   try {
-    const { title, content, category, author, publishDate, status } = req.body;
+    const { title, content, category, author, publishDate, status, imageUrl: imageUrlInput } = req.body;
     const data = { title, content, category, author, status };
 
     if (publishDate !== undefined) {
       data.publishDate = new Date(publishDate);
+    }
+
+    if (req.file) {
+      const ext      = path.extname(req.file.originalname).toLowerCase();
+      const filename = `${uuidv4()}${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+      const proto    = req.headers['x-forwarded-proto'] || req.protocol;
+      const host     = req.headers['x-forwarded-host']  || req.get('host');
+      data.imageUrl  = `${proto}://${host}/uploads/${filename}`;
+    } else if (imageUrlInput !== undefined) {
+      data.imageUrl = imageUrlInput.trim() || null;
     }
 
     const blog = await prisma.blog.update({ where: { id: req.params.id }, data });

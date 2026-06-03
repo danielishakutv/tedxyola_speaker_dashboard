@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Save, CheckCircle, AlertCircle, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, AlertCircle, Calendar, Upload, Link2, Image } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
+import MediaPicker from '../components/MediaPicker';
+import RichTextEditor from '../components/RichTextEditor';
 import './BlogForm.css';
 
-const REQUIRED_FIELDS  = ['title', 'content', 'category', 'author'];
 const FIELD_LABELS = {
   title: 'Blog Title',
-  content: 'Blog Content',
   category: 'Category',
   author: 'Author',
-  publishDate: 'Publish Date'
 };
 
 const CATEGORIES = [
@@ -27,6 +26,13 @@ const CATEGORIES = [
   'Other'
 ];
 
+/* Strip tags to count real words / validate non-empty rich text. */
+const htmlToText = (html) => {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html || '';
+  return (tmp.textContent || '').replace(/ /g, ' ').trim();
+};
+
 const BlogForm = () => {
   const { id }    = useParams();
   const navigate  = useNavigate();
@@ -39,6 +45,12 @@ const BlogForm = () => {
     author: '',
     publishDate: new Date().toISOString().split('T')[0],
   });
+
+  const [imageMode,       setImageMode]       = useState('url'); // 'url' | 'upload' | 'media'
+  const [imageFile,       setImageFile]       = useState(null);
+  const [imageUrlInput,   setImageUrlInput]   = useState('');
+  const [imagePreview,    setImagePreview]    = useState(null);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
   const [loading,      setLoading]      = useState(false);
   const [fetchLoading, setFetchLoading] = useState(isEditing);
@@ -57,10 +69,15 @@ const BlogForm = () => {
             content: data.content || '',
             category: data.category || 'Technology',
             author: data.author || '',
-            publishDate: data.publishDate 
+            publishDate: data.publishDate
               ? new Date(data.publishDate).toISOString().split('T')[0]
               : new Date().toISOString().split('T')[0],
           });
+          if (data.imageUrl) {
+            setImageUrlInput(data.imageUrl);
+            setImagePreview(data.imageUrl);
+            setImageMode('url');
+          }
         }
       } catch (e) {
         console.error('Error fetching blog:', e);
@@ -77,12 +94,25 @@ const BlogForm = () => {
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
   };
 
+  const handleContentChange = (html) => {
+    setFormData(prev => ({ ...prev, content: html }));
+    if (errors.content) setErrors(prev => ({ ...prev, content: null }));
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
   /* ── Validation ──────────────────────────────────────── */
   const validate = () => {
     const errs = {};
-    REQUIRED_FIELDS.forEach(field => {
+    ['title', 'category', 'author'].forEach(field => {
       if (!formData[field].trim()) errs[field] = `${FIELD_LABELS[field]} is required`;
     });
+    if (!htmlToText(formData.content)) errs.content = 'Blog Content is required';
     return errs;
   };
 
@@ -92,22 +122,28 @@ const BlogForm = () => {
     const validationErrors = validate();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      document.querySelector('.input-error, .field-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.querySelector('.input-error, .field-error, .rte-error')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     setLoading(true);
     try {
-      const payload = {
-        ...formData,
-        status: targetStatus,
-      };
+      const body = new FormData();
+      body.append('title', formData.title);
+      body.append('content', formData.content);
+      body.append('category', formData.category);
+      body.append('author', formData.author);
+      body.append('publishDate', formData.publishDate);
+      body.append('status', targetStatus);
+      if (imageMode === 'upload') {
+        if (imageFile) body.append('image', imageFile);
+      } else {
+        body.append('imageUrl', imageUrlInput.trim());
+      }
+
       const res = await authFetch(
         isEditing ? `/api/blogs/${id}` : '/api/blogs',
-        {
-          method: isEditing ? 'PUT' : 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }
+        { method: isEditing ? 'PUT' : 'POST', body }
       );
       if (!res.ok) throw new Error('Failed to save blog');
       navigate('/blogs');
@@ -121,9 +157,25 @@ const BlogForm = () => {
 
   if (fetchLoading) return <div className="loading-state">Loading blog…</div>;
 
+  const previewSrc = imageMode === 'upload' ? imagePreview : (imageUrlInput.trim() || null);
+  const wordCount  = htmlToText(formData.content).split(/\s+/).filter(Boolean).length;
+
   /* ── Render ──────────────────────────────────────────── */
   return (
     <div className="blog-form-page">
+
+      {/* Media Picker Modal */}
+      {showMediaPicker && (
+        <MediaPicker
+          onSelect={(item) => {
+            setImageUrlInput(item.url);
+            setImagePreview(item.url);
+            setImageMode('media');
+            setShowMediaPicker(false);
+          }}
+          onClose={() => setShowMediaPicker(false)}
+        />
+      )}
 
       {/* Header */}
       <div className="form-page-header">
@@ -150,7 +202,7 @@ const BlogForm = () => {
 
       <div className="form-layout-blog">
 
-        {/* ── Main Content ──────────────────────────────── */}
+        {/* ── Blog Details ──────────────────────────────── */}
         <div className="form-section card">
           <h3 className="section-heading">Blog Details</h3>
 
@@ -198,9 +250,7 @@ const BlogForm = () => {
           </div>
 
           <div className="form-group">
-            <label>
-              Publish Date <span className="optional">(optional)</span>
-            </label>
+            <label>Publish Date <span className="optional">(optional)</span></label>
             <div className="date-input-wrapper">
               <Calendar size={15} className="date-icon" />
               <input
@@ -208,27 +258,114 @@ const BlogForm = () => {
                 name="publishDate"
                 value={formData.publishDate}
                 onChange={handleChange}
-                className={errors.publishDate ? 'input-error' : ''}
               />
             </div>
-            {errors.publishDate && <span className="field-error"><AlertCircle size={12} />{errors.publishDate}</span>}
+          </div>
+        </div>
+
+        {/* ── Featured Image ────────────────────────────── */}
+        <div className="form-section card">
+          <h3 className="section-heading">Featured Image <span className="optional">(optional)</span></h3>
+
+          <div className="image-mode-tabs">
+            <button type="button"
+              className={`image-mode-tab ${imageMode === 'url' ? 'active' : ''}`}
+              onClick={() => setImageMode('url')}>
+              <Link2 size={13} /> Image URL
+            </button>
+            <button type="button"
+              className={`image-mode-tab ${imageMode === 'upload' ? 'active' : ''}`}
+              onClick={() => setImageMode('upload')}>
+              <Upload size={13} /> Upload
+            </button>
+            <button type="button"
+              className={`image-mode-tab ${imageMode === 'media' ? 'active' : ''}`}
+              onClick={() => setShowMediaPicker(true)}>
+              <Image size={13} /> Media
+            </button>
           </div>
 
-          <div className="form-group">
-            <label>Blog Content <span className="required">*</span></label>
-            <textarea
-              name="content"
-              value={formData.content}
-              onChange={handleChange}
-              placeholder="Write your blog post content here. Share your insights, stories, and ideas…"
-              rows="16"
-              className={errors.content ? 'input-error' : ''}
-            />
-            {errors.content && <span className="field-error"><AlertCircle size={12} />{errors.content}</span>}
-            <small className="field-hint">
-              {formData.content.length} characters · {Math.ceil(formData.content.split(/\s+/).filter(w => w).length / 200)} min read
-            </small>
+          {/* URL tab */}
+          {imageMode === 'url' && (
+            <>
+              <input type="url" value={imageUrlInput}
+                onChange={e => setImageUrlInput(e.target.value)}
+                placeholder="https://example.com/featured.jpg" />
+              {previewSrc && (
+                <div className="image-preview url-preview">
+                  <img src={previewSrc} alt="Preview"
+                    onError={e => e.currentTarget.parentElement.classList.add('broken')}
+                    onLoad={e => e.currentTarget.parentElement.classList.remove('broken')} />
+                  <span className="broken-hint">Image URL can't be loaded</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Media tab */}
+          {imageMode === 'media' && (
+            <>
+              <div className="media-selected-row">
+                <span className="media-selected-label">
+                  {imageUrlInput ? 'Selected from Media Library' : 'No image selected yet'}
+                </span>
+                <button type="button" className="btn secondary small-btn"
+                  onClick={() => setShowMediaPicker(true)}>
+                  {imageUrlInput ? 'Change' : 'Browse Media'}
+                </button>
+              </div>
+              {previewSrc && (
+                <div className="image-preview url-preview" style={{ marginTop: '0.75rem' }}>
+                  <img src={previewSrc} alt="Preview"
+                    onError={e => e.currentTarget.parentElement.classList.add('broken')}
+                    onLoad={e => e.currentTarget.parentElement.classList.remove('broken')} />
+                  <span className="broken-hint">Image can't be loaded</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Upload tab */}
+          {imageMode === 'upload' && (
+            <div className="image-upload-zone">
+              {previewSrc ? (
+                <div className="image-preview">
+                  <img src={previewSrc} alt="Preview" />
+                  <div className="image-overlay">
+                    <button type="button" className="btn secondary"
+                      onClick={() => document.getElementById('blog-image-upload').click()}>
+                      Change Image
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label htmlFor="blog-image-upload" className="upload-placeholder">
+                  <Upload size={26} />
+                  <span>Click to upload featured image</span>
+                  <small>PNG, JPG — wide/landscape preferred</small>
+                </label>
+              )}
+              <input type="file" id="blog-image-upload" accept="image/*"
+                onChange={handleImageChange} style={{ display: 'none' }} />
+            </div>
+          )}
+        </div>
+
+        {/* ── Content (rich text) ───────────────────────── */}
+        <div className="form-section card">
+          <div className="section-heading-row">
+            <h3 className="section-heading">Blog Content <span className="required">*</span></h3>
+            <span className="field-hint" style={{ marginTop: 0 }}>
+              {wordCount} word{wordCount !== 1 ? 's' : ''} · {Math.max(1, Math.ceil(wordCount / 200))} min read
+            </span>
           </div>
+          <RichTextEditor
+            value={formData.content}
+            onChange={handleContentChange}
+            placeholder="Write your blog post here. Use the toolbar for headings, lists, quotes, and links…"
+            error={Boolean(errors.content)}
+          />
+          {errors.content && <span className="field-error" style={{ marginTop: '0.5rem' }}><AlertCircle size={12} />{errors.content}</span>}
         </div>
 
       </div>
