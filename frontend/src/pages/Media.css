@@ -113,6 +113,7 @@
   height: 160px;
   background-color: #111;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .media-thumb img {
@@ -141,6 +142,25 @@
 
 .media-card:hover .media-thumb-overlay {
   opacity: 1;
+}
+
+/* ── View (expand) button ─────────────────────────────────── */
+.media-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  background-color: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.media-view-btn:hover {
+  background-color: rgba(255, 255, 255, 0.22);
 }
 
 /* ── Copy button ──────────────────────────────────────────── */
@@ -179,6 +199,18 @@
 
 .media-delete-btn:hover {
   background-color: rgba(239, 68, 68, 0.4);
+}
+
+/* The global `button` rule adds large em-based padding; these are fixed
+   32×32 icon buttons, so reset it or the icon's box collapses to nothing. */
+.media-view-btn,
+.media-copy-btn,
+.media-delete-btn {
+  padding: 0;
+}
+
+.media-thumb-overlay svg {
+  flex-shrink: 0;
 }
 
 /* ── Info ─────────────────────────────────────────────────── */
@@ -341,10 +373,129 @@
   border-color: rgba(239, 68, 68, 0.5);
 }
 
+/* ── Lightbox (full-size view) ────────────────────────────── */
+.media-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: lb-fade 0.15s ease;
+}
+
+@keyframes lb-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.media-lightbox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Toolbar */
+.media-lightbox-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.lb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background-color: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.lb-btn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-main);
+  border-color: var(--border-color);
+}
+
+.lb-btn.lb-close {
+  padding: 0.45rem;
+  color: var(--text-muted);
+}
+
+.lb-btn.lb-close:hover {
+  color: var(--danger);
+}
+
+/* Image stage */
+.media-lightbox-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  flex: 1;
+}
+
+.media-lightbox-stage img {
+  max-width: 86vw;
+  max-height: 72vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* Caption */
+.media-lightbox-caption {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-width: 86vw;
+}
+
+.lb-name {
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lb-meta {
+  flex-shrink: 0;
+}
+
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 640px) {
   .media-header {
     flex-direction: column;
+  }
+
+  .media-lightbox-toolbar .lb-btn span {
+    display: none;
+  }
+
+  .media-lightbox-stage img {
+    max-width: 92vw;
+    max-height: 64vh;
   }
 
   .media-header-actions {

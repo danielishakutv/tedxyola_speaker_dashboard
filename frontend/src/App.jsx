@@ -11,6 +11,7 @@ import BlogForm from './pages/BlogForm';
 import Settings from './pages/Settings';
 import ApiDocs from './pages/ApiDocs';
 import Media from './pages/Media';
+import Links from './pages/Links';
 import './App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -56,6 +57,7 @@ function App() {
           <Route path="blogs/new" element={<BlogForm />} />
           <Route path="blogs/edit/:id" element={<BlogForm />} />
           <Route path="media" element={<Media />} />
+          <Route path="links" element={<Links />} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
         </Route>

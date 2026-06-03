@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Upload, Trash2, Image, RefreshCw, Copy, Check,
   AlertTriangle, X, HardDrive, Calendar, User,
+  Maximize2, Download, Link2, ExternalLink,
 } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
 import './Media.css';
@@ -16,10 +17,39 @@ const fmtSize = (bytes) => {
 const fmtDate = (d) =>
   new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+/* Copy the actual image bitmap to the clipboard.
+   Browsers only reliably accept image/png in the clipboard, so non-PNG
+   sources are redrawn to a canvas and exported as PNG first. The /uploads
+   images are same-origin, so the canvas stays untainted. */
+const copyImageToClipboard = async (url) => {
+  const res  = await fetch(url);
+  const blob = await res.blob();
+
+  let pngBlob = blob;
+  if (blob.type !== 'image/png') {
+    pngBlob = await new Promise((resolve, reject) => {
+      const img = new window.Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas  = document.createElement('canvas');
+        canvas.width  = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        canvas.toBlob(b => (b ? resolve(b) : reject(new Error('encode failed'))), 'image/png');
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(blob);
+    });
+  }
+
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+};
+
 /* ── Copy button ─────────────────────────────────────────── */
 const CopyBtn = ({ text }) => {
   const [copied, setCopied] = useState(false);
-  const copy = async () => {
+  const copy = async (e) => {
+    e?.stopPropagation();
     try { await navigator.clipboard.writeText(text); } catch { /* ignore */ }
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -28,6 +58,75 @@ const CopyBtn = ({ text }) => {
     <button className="media-copy-btn" onClick={copy} title="Copy URL">
       {copied ? <Check size={13} /> : <Copy size={13} />}
     </button>
+  );
+};
+
+/* ── Lightbox — full-size view with minimalist controls ──── */
+const Lightbox = ({ item, onClose, showToast }) => {
+  const [copiedImg, setCopiedImg] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const copyImage = async () => {
+    try {
+      await copyImageToClipboard(item.url);
+      setCopiedImg(true);
+      setTimeout(() => setCopiedImg(false), 1500);
+      showToast('Image copied to clipboard');
+    } catch {
+      showToast('Image copy not supported in this browser', 'error');
+    }
+  };
+
+  const copyUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(item.url);
+      setCopiedUrl(true);
+      setTimeout(() => setCopiedUrl(false), 1500);
+      showToast('URL copied');
+    } catch {
+      showToast('Failed to copy URL', 'error');
+    }
+  };
+
+  return (
+    <div className="media-lightbox-overlay" onClick={onClose}>
+      <div className="media-lightbox" onClick={e => e.stopPropagation()}>
+        <div className="media-lightbox-toolbar">
+          <button className="lb-btn" onClick={copyImage} title="Copy image to clipboard">
+            {copiedImg ? <Check size={15} /> : <Copy size={15} />}
+            <span>{copiedImg ? 'Copied' : 'Copy image'}</span>
+          </button>
+          <button className="lb-btn" onClick={copyUrl} title="Copy image URL">
+            {copiedUrl ? <Check size={15} /> : <Link2 size={15} />}
+            <span>{copiedUrl ? 'Copied' : 'Copy link'}</span>
+          </button>
+          <a className="lb-btn" href={item.url} download={item.originalName} title="Download">
+            <Download size={15} /><span>Download</span>
+          </a>
+          <a className="lb-btn" href={item.url} target="_blank" rel="noreferrer" title="Open in new tab">
+            <ExternalLink size={15} /><span>Open</span>
+          </a>
+          <button className="lb-btn lb-close" onClick={onClose} title="Close (Esc)">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="media-lightbox-stage">
+          <img src={item.url} alt={item.originalName} />
+        </div>
+
+        <div className="media-lightbox-caption">
+          <span className="lb-name" title={item.originalName}>{item.originalName}</span>
+          <span className="lb-meta">{fmtSize(item.size)} · {fmtDate(item.createdAt)}</span>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -55,6 +154,7 @@ const Media = () => {
   const [loading,     setLoading]     = useState(true);
   const [uploading,   setUploading]   = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [viewTarget,  setViewTarget]  = useState(null);
   const [toast,       setToast]       = useState(null);
   const [dragOver,    setDragOver]    = useState(false);
   const fileInputRef = useRef(null);
@@ -153,6 +253,15 @@ const Media = () => {
         />
       )}
 
+      {/* Full-size lightbox */}
+      {viewTarget && (
+        <Lightbox
+          item={viewTarget}
+          onClose={() => setViewTarget(null)}
+          showToast={showToast}
+        />
+      )}
+
       {/* Header */}
       <div className="media-header">
         <div>
@@ -219,13 +328,20 @@ const Media = () => {
         <div className="media-grid">
           {items.map(item => (
             <div key={item.id} className="media-card">
-              <div className="media-thumb">
+              <div className="media-thumb" onClick={() => setViewTarget(item)}>
                 <img src={item.url} alt={item.originalName} loading="lazy" />
                 <div className="media-thumb-overlay">
+                  <button
+                    className="media-view-btn"
+                    onClick={(e) => { e.stopPropagation(); setViewTarget(item); }}
+                    title="View full size"
+                  >
+                    <Maximize2 size={14} />
+                  </button>
                   <CopyBtn text={item.url} />
                   <button
                     className="media-delete-btn"
-                    onClick={() => setDeleteTarget(item)}
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(item); }}
                     title="Delete"
                   >
                     <Trash2 size={13} />

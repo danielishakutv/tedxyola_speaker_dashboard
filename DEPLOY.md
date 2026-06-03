@@ -220,6 +220,11 @@ cd /opt/tedxyola-speaker && git pull
 # frontend changed: cd frontend && npm install && npm run build
 pm2 logs tedx-speaker   # live logs when something misbehaves
 
+-----------------------------------------------
+
+cd /opt/tedxyola-speaker && git pull
+cd frontend && npm run build
+pm2 restart tedx-speaker
 
 
 --------------------------------------
