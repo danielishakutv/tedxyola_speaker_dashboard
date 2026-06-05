@@ -1111,6 +1111,57 @@ app.delete('/api/links/:slug', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
+// GITHUB COMMITS PROXY  (admin only — keeps any token server-side)
+// ══════════════════════════════════════════════════════════
+app.get('/api/commits', requireAuth, async (req, res) => {
+  try {
+    const GITHUB_OWNER = process.env.GITHUB_OWNER || 'danielishakutv';
+    const GITHUB_REPO  = process.env.GITHUB_REPO  || 'tedxyola_speaker_dashboard';
+    const page         = parseInt(req.query.page)  || 1;
+    const per_page     = Math.min(parseInt(req.query.per_page) || 100, 100);
+
+    const headers = { 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (process.env.GITHUB_TOKEN) headers['Authorization'] = `Bearer ${process.env.GITHUB_TOKEN}`;
+
+    const ghRes = await fetch(
+      `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/commits?per_page=${per_page}&page=${page}`,
+      { headers }
+    );
+
+    if (!ghRes.ok) {
+      const err = await ghRes.json().catch(() => ({}));
+      return res.status(ghRes.status).json({ error: err.message || 'GitHub API error' });
+    }
+
+    const commits = await ghRes.json();
+
+    // Shape into a clean, minimal response the frontend can consume directly
+    const shaped = commits.map(c => ({
+      sha:     c.sha,
+      short:   c.sha.slice(0, 7),
+      message: c.commit.message,
+      subject: c.commit.message.split('\n')[0],
+      body:    c.commit.message.split('\n').slice(2).join('\n').trim(),
+      author:  {
+        name:   c.commit.author.name,
+        email:  c.commit.author.email,
+        date:   c.commit.author.date,
+        avatar: c.author?.avatar_url || null,
+        login:  c.author?.login     || null,
+      },
+      url: c.html_url,
+    }));
+
+    // Pass through pagination headers
+    res.set('X-GitHub-Total', ghRes.headers.get('x-github-total-count') || '');
+    res.json(shaped);
+  } catch (err) {
+    console.error('GitHub proxy error:', err);
+    res.status(500).json({ error: 'Failed to fetch commits' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
 // SERVE FRONTEND  (production build, if present)
 // ══════════════════════════════════════════════════════════
 // In production the backend also serves the compiled React app, so a single

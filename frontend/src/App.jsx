@@ -12,6 +12,7 @@ import PopupsList from './pages/PopupsList';
 import PopupForm from './pages/PopupForm';
 import Settings from './pages/Settings';
 import ApiDocs from './pages/ApiDocs';
+import CommitLogs from './pages/CommitLogs';
 import Media from './pages/Media';
 import Links from './pages/Links';
 import './App.css';
@@ -64,6 +65,7 @@ function App() {
           <Route path="media" element={<Media />} />
           <Route path="links" element={<Links />} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
+          <Route path="commit-logs" element={<AdminRoute><CommitLogs /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
         </Route>
       </Routes>

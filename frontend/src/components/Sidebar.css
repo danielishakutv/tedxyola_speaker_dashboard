@@ -109,6 +109,47 @@
   border-color: rgba(239, 68, 68, 0.3);
 }
 
+/* ── Developer dropdown group ───────────────────────────────── */
+.nav-group {
+  position: relative;
+}
+
+.nav-group-trigger {
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  justify-content: flex-start;
+}
+
+.nav-chevron {
+  margin-left: auto;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.nav-chevron.open {
+  transform: rotate(180deg);
+}
+
+.nav-sub-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.15rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--border-color);
+  margin-left: 1.35rem;
+}
+
+.nav-sub-item {
+  font-size: 0.85rem;
+  padding: 0.55rem 0.75rem;
+}
+
 /* ── Mobile: slide-in drawer ────────────────────────────────── */
 @media (max-width: 768px) {
   .sidebar {

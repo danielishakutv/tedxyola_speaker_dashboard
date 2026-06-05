@@ -8,9 +8,13 @@ const PAGE_TITLES = {
   '/dashboard': 'Overview',
   '/speakers': 'Speakers',
   '/speakers/new': 'Add Speaker',
+  '/sponsors': 'Sponsors',
+  '/blogs': 'Blogs',
+  '/popups': 'Popups',
   '/media': 'Media Library',
   '/links': 'Links & QR Codes',
   '/api-docs': 'API Documentation',
+  '/commit-logs': 'Commit Logs',
   '/settings': 'Settings',
 };
 

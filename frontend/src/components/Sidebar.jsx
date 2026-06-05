@@ -1,9 +1,15 @@
-import { NavLink, useNavigate } from 'react-router-dom';
-import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon, Building, FileText, Link2, MessageSquare } from 'lucide-react';
+import { useState } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon, Building, FileText, Link2, MessageSquare, Terminal, GitCommit, ChevronDown } from 'lucide-react';
 import './Sidebar.css';
 
 const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Auto-open the Developer dropdown when on a developer sub-page
+  const isDevPage = location.pathname === '/api-docs' || location.pathname === '/commit-logs';
+  const [devOpen, setDevOpen] = useState(isDevPage);
 
   const handleLogout = () => {
     localStorage.removeItem('tedx_token');
@@ -63,14 +69,42 @@ const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
               <span>Links &amp; QR</span>
             </NavLink>
           </li>
+
+          {/* ── Developer dropdown ─────────────────────── */}
           {isAdmin && (
-            <li>
-              <NavLink to="/api-docs" className="nav-item" onClick={onClose}>
-                <Code size={18} />
-                <span>API Docs</span>
-              </NavLink>
+            <li className="nav-group">
+              <button
+                className={`nav-item nav-group-trigger ${isDevPage ? 'active' : ''}`}
+                onClick={() => setDevOpen(o => !o)}
+                aria-expanded={devOpen}
+              >
+                <Terminal size={18} />
+                <span>Developer</span>
+                <ChevronDown
+                  size={14}
+                  className={`nav-chevron ${devOpen ? 'open' : ''}`}
+                />
+              </button>
+
+              {devOpen && (
+                <ul className="nav-sub-list">
+                  <li>
+                    <NavLink to="/api-docs" className="nav-item nav-sub-item" onClick={onClose}>
+                      <Code size={15} />
+                      <span>API Docs</span>
+                    </NavLink>
+                  </li>
+                  <li>
+                    <NavLink to="/commit-logs" className="nav-item nav-sub-item" onClick={onClose}>
+                      <GitCommit size={15} />
+                      <span>Commit Logs</span>
+                    </NavLink>
+                  </li>
+                </ul>
+              )}
             </li>
           )}
+
           {isAdmin && (
             <li>
               <NavLink to="/settings" className="nav-item" onClick={onClose}>
