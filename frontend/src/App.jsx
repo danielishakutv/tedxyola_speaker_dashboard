@@ -8,6 +8,8 @@ import SponsorsList from './pages/SponsorsList';
 import SponsorForm from './pages/SponsorForm';
 import BlogsList from './pages/BlogsList';
 import BlogForm from './pages/BlogForm';
+import PopupsList from './pages/PopupsList';
+import PopupForm from './pages/PopupForm';
 import Settings from './pages/Settings';
 import ApiDocs from './pages/ApiDocs';
 import Media from './pages/Media';
@@ -56,6 +58,9 @@ function App() {
           <Route path="blogs" element={<BlogsList />} />
           <Route path="blogs/new" element={<BlogForm />} />
           <Route path="blogs/edit/:id" element={<BlogForm />} />
+          <Route path="popups" element={<PopupsList />} />
+          <Route path="popups/new" element={<PopupForm />} />
+          <Route path="popups/edit/:id" element={<PopupForm />} />
           <Route path="media" element={<Media />} />
           <Route path="links" element={<Links />} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />

@@ -77,3 +77,21 @@ model Blog {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model Popup {
+  id          String    @id @default(uuid())
+  title       String
+  body        String
+  buttonLabel String?   // CTA button text, e.g. "Get Tickets"
+  buttonUrl   String?   // CTA button link
+  imageUrl    String?   // Image (URL, uploaded file, or media-library pick)
+  status      String    @default("DRAFT")            // "DRAFT" or "PUBLISHED"
+  frequency   String    @default("ONCE_PER_SESSION") // EVERY_VISIT | ONCE_PER_SESSION | ONCE_PER_DAY | ONCE_EVER
+  priority    Int       @default(0)                  // higher shows first when several are active
+  startAt     DateTime?                              // null = show immediately once published
+  endAt       DateTime?                              // null = no expiry; otherwise auto-hides after this day
+  views       Int       @default(0)                  // impression counter (public tracking)
+  clicks      Int       @default(0)                  // CTA click counter (public tracking)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

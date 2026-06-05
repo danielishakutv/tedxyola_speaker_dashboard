@@ -1,0 +1,150 @@
+/* ═══════════════════════════════════════════════════════════
+   POPUP FORM  –  reuses the shared form styles from BlogForm.css
+   (form-page-header, section-heading, form-group, image-mode-tabs,
+   date-input-wrapper, etc.) and adds popup-specific layout + preview.
+   ═══════════════════════════════════════════════════════════ */
+
+.popup-form-page {
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ── Two-column layout: form + sticky preview ───────────── */
+.popup-form-layout {
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.popup-form-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.popup-form-side {
+  position: sticky;
+  top: 1rem;
+}
+
+/* datetime-local needs the same left padding as date inputs for the icon */
+.popup-form-page .date-input-wrapper input[type="datetime-local"] {
+  padding-left: 2.5rem;
+  width: 100%;
+}
+
+.popup-form-page textarea {
+  resize: vertical;
+  min-height: 90px;
+  line-height: 1.55;
+}
+
+/* ── Live preview ───────────────────────────────────────── */
+.preview-card { padding: 1.5rem; }
+
+.popup-preview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(45deg, rgba(0,0,0,0.04) 0 10px, transparent 10px 20px),
+    var(--bg);
+  border: 1px solid var(--border-color, var(--border));
+}
+
+.popup-preview {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border-color, var(--border));
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.pp-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: default;
+}
+
+.pp-image {
+  width: 100%;
+  height: 130px;
+  overflow: hidden;
+  background: #111;
+}
+
+.pp-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pp-content { padding: 1rem 1.1rem 1.25rem; }
+
+.pp-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+  color: var(--text-primary, var(--text-main));
+  line-height: 1.3;
+}
+
+.pp-body {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary, var(--text-muted));
+  margin: 0 0 0.9rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pp-cta {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: var(--ted-red);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-note {
+  margin: 0.85rem 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted, var(--text-secondary));
+  text-align: center;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .popup-form-layout { grid-template-columns: 1fr; }
+  .popup-form-side { position: static; }
+  .popup-preview { max-width: 340px; margin: 0 auto; }
+}
+
+@media (max-width: 640px) {
+  .popup-form-page .field-row.two-col { grid-template-columns: 1fr; }
+  .form-page-header { flex-direction: column; align-items: flex-start; }
+}

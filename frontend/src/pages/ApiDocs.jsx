@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Copy, Check, Filter, Globe, List, FileText, Lock } from 'lucide-react';
+import { Copy, Check, Filter, Globe, List, FileText, Lock, MessageSquare } from 'lucide-react';
 import './ApiDocs.css';
 
 // The deployed origin (e.g. https://speaker.tedxyola.com). Used so every copied
@@ -130,6 +130,86 @@ const blogResponseExample = `{
   "createdAt": "2026-06-03T12:00:00.000Z",
   "updatedAt": "2026-06-03T12:00:00.000Z"
 }`;
+
+/* ── Popup request body fields ───────────────────────────── */
+const POPUP_FIELDS = [
+  ['title',       'string',        'Message title (required)'],
+  ['body',        'string',        'Message body (required)'],
+  ['buttonLabel', 'string | null', 'CTA button text, e.g. "Get Tickets". Omit for no button.'],
+  ['buttonUrl',   'string | null', 'CTA button link. Required if buttonLabel is set.'],
+  ['imageUrl',    'string | null', 'Image URL. Provide this OR upload an image file.'],
+  ['image',       'file',          'Image upload (multipart only). Saved to /uploads and returned as imageUrl.'],
+  ['status',      'string',        'DRAFT (default) or PUBLISHED'],
+  ['frequency',   'string',        'EVERY_VISIT | ONCE_PER_SESSION (default) | ONCE_PER_DAY | ONCE_EVER'],
+  ['priority',    'number',        'Higher shows first when several are active (default 0)'],
+  ['startAt',     'string | null', 'ISO/datetime — when it starts showing. Empty = immediately once published.'],
+  ['endAt',       'string | null', 'ISO/datetime — when it auto-expires. Empty = no expiry.'],
+];
+
+const popupJsonRequest = `POST /api/popups
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "title": "Early-bird tickets are live!",
+  "body": "Save 30% on TEDxYola 2026 passes — this week only.",
+  "buttonLabel": "Get Tickets",
+  "buttonUrl": "https://tedxyola.com/tickets",
+  "imageUrl": "https://speaker.tedxyola.com/uploads/tickets.jpg",
+  "status": "PUBLISHED",
+  "frequency": "ONCE_PER_DAY",
+  "priority": 5,
+  "startAt": "2026-06-10T09:00",
+  "endAt": "2026-06-17T23:59"
+}`;
+
+const popupUploadRequest = `# Upload an image file with the popup (multipart/form-data)
+curl -X POST https://speaker.tedxyola.com/api/popups \\
+  -H "Authorization: Bearer <token>" \\
+  -F "title=Early-bird tickets are live!" \\
+  -F "body=Save 30% on TEDxYola 2026 passes — this week only." \\
+  -F "buttonLabel=Get Tickets" \\
+  -F "buttonUrl=https://tedxyola.com/tickets" \\
+  -F "status=PUBLISHED" \\
+  -F "frequency=ONCE_PER_DAY" \\
+  -F "priority=5" \\
+  -F "endAt=2026-06-17T23:59" \\
+  -F "image=@./tickets.jpg"`;
+
+const popupCreateResponse = `{
+  "id": "980224f9-a39d-498e-8ce9-5a19eaf82098",
+  "title": "Early-bird tickets are live!",
+  "body": "Save 30% on TEDxYola 2026 passes — this week only.",
+  "buttonLabel": "Get Tickets",
+  "buttonUrl": "https://tedxyola.com/tickets",
+  "imageUrl": "https://speaker.tedxyola.com/uploads/tickets.jpg",
+  "status": "PUBLISHED",
+  "frequency": "ONCE_PER_DAY",
+  "priority": 5,
+  "startAt": "2026-06-10T08:00:00.000Z",
+  "endAt": "2026-06-17T22:59:00.000Z",
+  "views": 0,
+  "clicks": 0,
+  "createdAt": "2026-06-05T10:04:50.009Z",
+  "updatedAt": "2026-06-05T10:04:50.009Z"
+}`;
+
+const popupActiveResponse = `[
+  {
+    "id": "980224f9-a39d-498e-8ce9-5a19eaf82098",
+    "title": "Early-bird tickets are live!",
+    "body": "Save 30% on TEDxYola 2026 passes — this week only.",
+    "buttonLabel": "Get Tickets",
+    "buttonUrl": "https://tedxyola.com/tickets",
+    "imageUrl": "https://speaker.tedxyola.com/uploads/tickets.jpg",
+    "frequency": "ONCE_PER_DAY",
+    "priority": 5,
+    "startAt": "2026-06-10T08:00:00.000Z",
+    "endAt": "2026-06-17T22:59:00.000Z"
+  }
+]
+// Returns [] when nothing is active. status, views and clicks
+// are intentionally omitted from this public endpoint.`;
 
 const ApiDocs = () => {
   const [preview, setPreview] = useState({ state: 'loading', data: null });
@@ -506,6 +586,166 @@ all.forEach(s => {
       </section>
 
       {/* ══════════════════════════════════════════════════ */}
+      {/* POPUP API DOCUMENTATION                            */}
+      {/* ══════════════════════════════════════════════════ */}
+
+      <section className="ad-card card" style={{ marginTop: '2rem' }}>
+        <div className="ad-card-head">
+          <div className="ad-card-icon" style={{ background: 'rgba(236,72,153,0.12)', color: '#ec4899' }}>
+            <MessageSquare size={16} />
+          </div>
+          <div>
+            <h3>Popup Endpoints</h3>
+            <p>Announcement popups for the public website, with scheduling and tracking.</p>
+          </div>
+        </div>
+
+        <h4 className="ad-h4">Public Endpoints (No Authentication)</h4>
+
+        <div className="ad-endpoint-list">
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/public/popups/active</code>
+            </div>
+            <p className="ad-endpoint-desc">
+              Returns an array of popups that are currently active — PUBLISHED and within their
+              [startAt, endAt] window — ordered by priority (desc), then newest. Returns <code className="ad-inline">[]</code> when
+              there is nothing to show, so the website can simply render whatever comes back, or nothing.
+            </p>
+            <small className="ad-note">
+              Each item: id, title, body, buttonLabel, buttonUrl, imageUrl, frequency, priority, startAt, endAt.
+              The server handles all date logic — the website never needs to check expiry itself.
+            </small>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method post">POST</span>
+              <code className="ad-ep-path">/api/public/popups/:id/view</code>
+            </div>
+            <p className="ad-endpoint-desc">Record one impression. Call when the popup is shown. Best-effort — always returns 200.</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method post">POST</span>
+              <code className="ad-ep-path">/api/public/popups/:id/click</code>
+            </div>
+            <p className="ad-endpoint-desc">Record one CTA click. Call when the visitor clicks the button. Best-effort — always returns 200.</p>
+          </div>
+        </div>
+
+        <h4 className="ad-h4">Protected Endpoints (Authentication Required)</h4>
+
+        <div className="ad-endpoint-list">
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/popups</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve all popups, including drafts and expired (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method">GET</span>
+              <code className="ad-ep-path">/api/popups/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Retrieve a single popup by ID (admin only)</p>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method post">POST</span>
+              <code className="ad-ep-path">/api/popups</code>
+            </div>
+            <p className="ad-endpoint-desc">Create a new popup (admin only)</p>
+            <small className="ad-note">
+              Accepts JSON or multipart/form-data. Fields: title*, body*, buttonLabel, buttonUrl,
+              status (DRAFT/PUBLISHED), frequency (EVERY_VISIT/ONCE_PER_SESSION/ONCE_PER_DAY/ONCE_EVER),
+              priority (number), startAt, endAt (ISO/datetime — empty = none), and an image as either
+              imageUrl (string) or image (uploaded file).
+            </small>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method put">PUT</span>
+              <code className="ad-ep-path">/api/popups/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Update an existing popup (admin only)</p>
+            <small className="ad-note">Same fields as POST. Send imageUrl to set/replace via URL, or an image file to upload. Omit both to leave the current image unchanged.</small>
+          </div>
+
+          <div className="ad-endpoint-item">
+            <div className="ad-ep-head">
+              <span className="ad-method delete">DELETE</span>
+              <code className="ad-ep-path">/api/popups/:id</code>
+            </div>
+            <p className="ad-endpoint-desc">Delete a popup (admin only)</p>
+          </div>
+        </div>
+
+        <h4 className="ad-h4"><FileText size={13} /> Request body fields</h4>
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead>
+              <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              {POPUP_FIELDS.map(([name, type, desc]) => (
+                <tr key={name}>
+                  <td><code className="ad-inline">{name}</code></td>
+                  <td className="ad-type">{type}</td>
+                  <td>{desc}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <CodeBlock title="Sample request — create a popup (JSON, image via URL)" code={popupJsonRequest} />
+        <CodeBlock title="Sample request — create a popup (multipart, upload a file)" code={popupUploadRequest} />
+        <CodeBlock title="Sample response — 201 Created" code={popupCreateResponse} />
+        <CodeBlock title="Sample response — GET /api/public/popups/active" code={popupActiveResponse} />
+
+        <CodeBlock
+          title="Sample — show active popups on your website"
+          code={`// Pull active popups and render them (respecting per-popup frequency)
+async function loadPopups() {
+  const res = await fetch("${ORIGIN}/api/public/popups/active");
+  const popups = await res.json();           // [] when nothing to show
+
+  for (const p of popups) {
+    if (!shouldShow(p)) continue;            // frequency cap (see below)
+    renderPopup(p);
+    fetch("${ORIGIN}/api/public/popups/" + p.id + "/view", { method: "POST" });
+  }
+}
+
+// Respect the popup's frequency using localStorage
+function shouldShow(p) {
+  const key = "tedx_popup_" + p.id;
+  const seen = localStorage.getItem(key);
+  if (p.frequency === "ONCE_EVER"   && seen) return false;
+  if (p.frequency === "ONCE_PER_DAY" && seen && Date.now() - +seen < 864e5) return false;
+  if (p.frequency === "ONCE_PER_SESSION" && sessionStorage.getItem(key)) return false;
+  return true;
+}
+
+// When shown, remember it; when the CTA is clicked, track it
+function onShown(p) {
+  localStorage.setItem("tedx_popup_" + p.id, String(Date.now()));
+  sessionStorage.setItem("tedx_popup_" + p.id, "1");
+}
+function onCtaClick(p) {
+  fetch("${ORIGIN}/api/public/popups/" + p.id + "/click", { method: "POST" });
+}`}
+        />
+      </section>
+
+      {/* ══════════════════════════════════════════════════ */}
       {/* ACTIVITY LOGS                                      */}
       {/* ══════════════════════════════════════════════════ */}
 
@@ -523,6 +763,7 @@ all.forEach(s => {
         <div className="ad-notes">
           <span className="ad-note"><Check size={12} /> CREATE_SPONSOR / UPDATE_SPONSOR / DELETE_SPONSOR</span>
           <span className="ad-note"><Check size={12} /> CREATE_BLOG / UPDATE_BLOG / DELETE_BLOG</span>
+          <span className="ad-note"><Check size={12} /> CREATE_POPUP / UPDATE_POPUP / DELETE_POPUP</span>
           <span className="ad-note"><Check size={12} /> Logs include timestamp, user, and affected resource details</span>
         </div>
       </section>

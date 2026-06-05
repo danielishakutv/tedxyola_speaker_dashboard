@@ -812,6 +812,224 @@ app.delete('/api/blogs/:id', requireAuth, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════
+// POPUP / ANNOUNCEMENT ROUTES
+// ══════════════════════════════════════════════════════════
+// A popup is "active" on the public website when it is PUBLISHED *and* the
+// current time falls inside its [startAt, endAt] window. The server computes
+// this so the website never has to reason about dates — it just renders what
+// the public endpoint returns, or nothing.
+
+const FREQUENCIES = ['EVERY_VISIT', 'ONCE_PER_SESSION', 'ONCE_PER_DAY', 'ONCE_EVER'];
+
+// Parse a datetime-local / ISO string into a Date, or null when empty.
+const parsePopupDate = (v) => {
+  if (v === undefined || v === null || String(v).trim() === '') return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+// ── PUBLIC: list all currently-active popups (no auth) ─────
+// Returns an array (possibly empty) ordered by priority desc, then newest.
+// The website can show one or queue/stack several.
+app.get('/api/public/popups/active', async (req, res) => {
+  try {
+    const now = new Date();
+    const popups = await prisma.popup.findMany({
+      where: {
+        status: 'PUBLISHED',
+        AND: [
+          { OR: [{ startAt: null }, { startAt: { lte: now } }] },
+          { OR: [{ endAt: null },   { endAt:   { gte: now } }] },
+        ],
+      },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        id:          true,
+        title:       true,
+        body:        true,
+        buttonLabel: true,
+        buttonUrl:   true,
+        imageUrl:    true,
+        frequency:   true,
+        priority:    true,
+        startAt:     true,
+        endAt:       true,
+      },
+    });
+    res.json(popups);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch active popups' });
+  }
+});
+
+// ── PUBLIC: track an impression (no auth) ──────────────────
+app.post('/api/public/popups/:id/view', async (req, res) => {
+  try {
+    await prisma.popup.update({
+      where: { id: req.params.id },
+      data: { views: { increment: 1 } },
+    });
+    res.json({ ok: true });
+  } catch {
+    // Don't leak whether the id exists; tracking is best-effort.
+    res.json({ ok: true });
+  }
+});
+
+// ── PUBLIC: track a CTA click (no auth) ────────────────────
+app.post('/api/public/popups/:id/click', async (req, res) => {
+  try {
+    await prisma.popup.update({
+      where: { id: req.params.id },
+      data: { clicks: { increment: 1 } },
+    });
+    res.json({ ok: true });
+  } catch {
+    res.json({ ok: true });
+  }
+});
+
+// ── ADMIN: list all popups ─────────────────────────────────
+app.get('/api/popups', requireAuth, async (req, res) => {
+  try {
+    const popups = await prisma.popup.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(popups);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch popups' });
+  }
+});
+
+// ── ADMIN: single popup ────────────────────────────────────
+app.get('/api/popups/:id', requireAuth, async (req, res) => {
+  try {
+    const popup = await prisma.popup.findUnique({ where: { id: req.params.id } });
+    if (!popup) return res.status(404).json({ error: 'Popup not found' });
+    res.json(popup);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch popup' });
+  }
+});
+
+// ── ADMIN: create popup ────────────────────────────────────
+app.post('/api/popups', requireAuth, upload.single('image'), async (req, res) => {
+  try {
+    const { title, body, buttonLabel, buttonUrl, status, frequency, priority,
+            startAt, endAt, imageUrl: imageUrlInput } = req.body;
+
+    if (!title?.trim() || !body?.trim()) {
+      return res.status(400).json({ error: 'Title and body are required' });
+    }
+
+    let imageUrl = imageUrlInput?.trim() || null;
+    if (req.file) {
+      const ext      = path.extname(req.file.originalname).toLowerCase();
+      const filename = `${uuidv4()}${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+      const proto    = req.headers['x-forwarded-proto'] || req.protocol;
+      const host     = req.headers['x-forwarded-host']  || req.get('host');
+      imageUrl = `${proto}://${host}/uploads/${filename}`;
+    }
+
+    const popup = await prisma.popup.create({
+      data: {
+        title:       title.trim(),
+        body:        body.trim(),
+        buttonLabel: buttonLabel?.trim() || null,
+        buttonUrl:   buttonUrl?.trim() || null,
+        imageUrl,
+        status:      status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT',
+        frequency:   FREQUENCIES.includes(frequency) ? frequency : 'ONCE_PER_SESSION',
+        priority:    Number.isFinite(parseInt(priority, 10)) ? parseInt(priority, 10) : 0,
+        startAt:     parsePopupDate(startAt),
+        endAt:       parsePopupDate(endAt),
+      },
+    });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'CREATE_POPUP',
+        details: JSON.stringify({ popupId: popup.id, popupTitle: popup.title }),
+      },
+    });
+
+    res.status(201).json(popup);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create popup' });
+  }
+});
+
+// ── ADMIN: update popup ────────────────────────────────────
+app.put('/api/popups/:id', requireAuth, upload.single('image'), async (req, res) => {
+  try {
+    const { title, body, buttonLabel, buttonUrl, status, frequency, priority,
+            startAt, endAt, imageUrl: imageUrlInput } = req.body;
+
+    const data = {};
+    if (title       !== undefined) data.title       = title.trim();
+    if (body        !== undefined) data.body        = body.trim();
+    if (buttonLabel !== undefined) data.buttonLabel = buttonLabel.trim() || null;
+    if (buttonUrl   !== undefined) data.buttonUrl   = buttonUrl.trim() || null;
+    if (status      !== undefined) data.status      = status === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT';
+    if (frequency   !== undefined && FREQUENCIES.includes(frequency)) data.frequency = frequency;
+    if (priority    !== undefined && Number.isFinite(parseInt(priority, 10))) data.priority = parseInt(priority, 10);
+    if (startAt     !== undefined) data.startAt = parsePopupDate(startAt);
+    if (endAt       !== undefined) data.endAt   = parsePopupDate(endAt);
+
+    if (req.file) {
+      const ext      = path.extname(req.file.originalname).toLowerCase();
+      const filename = `${uuidv4()}${ext}`;
+      fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+      const proto    = req.headers['x-forwarded-proto'] || req.protocol;
+      const host     = req.headers['x-forwarded-host']  || req.get('host');
+      data.imageUrl  = `${proto}://${host}/uploads/${filename}`;
+    } else if (imageUrlInput !== undefined) {
+      data.imageUrl = imageUrlInput.trim() || null;
+    }
+
+    const popup = await prisma.popup.update({ where: { id: req.params.id }, data });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'UPDATE_POPUP',
+        details: JSON.stringify({ popupId: popup.id, popupTitle: popup.title }),
+      },
+    });
+
+    res.json(popup);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update popup' });
+  }
+});
+
+// ── ADMIN: delete popup ────────────────────────────────────
+app.delete('/api/popups/:id', requireAuth, async (req, res) => {
+  try {
+    const popup = await prisma.popup.findUnique({ where: { id: req.params.id } });
+    await prisma.popup.delete({ where: { id: req.params.id } });
+
+    await prisma.activity.create({
+      data: {
+        userId: req.user.userId,
+        action: 'DELETE_POPUP',
+        details: JSON.stringify({ popupId: req.params.id, popupTitle: popup?.title }),
+      },
+    });
+
+    res.json({ message: 'Popup deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete popup' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
 // LINK SHORTENER + QR  (proxied to the external tedxyola.com service)
 // ══════════════════════════════════════════════════════════
 // The external admin API requires a secret API key. We keep that key on the
