@@ -9,6 +9,8 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
+import { WebSocketServer } from 'ws';
+import http from 'http';
 
 dotenv.config();
 
@@ -1437,7 +1439,9 @@ app.get('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) => 
 });
 
 // Validate a transaction payload against existing accounts. Returns { error } or { data }.
-const validateTxn = async ({ type, amount, accountId, toAccountId, category, note, date }) => {
+// excludeTxnId: when editing an existing transaction, exclude it from the balance
+// calculation so the account's balance is computed as if this txn doesn't exist yet.
+const validateTxn = async ({ type, amount, accountId, toAccountId, category, note, date }, excludeTxnId = null) => {
   if (!TXN_TYPES.includes(type)) return { error: 'Invalid transaction type' };
 
   const amt = parseAmount(amount);
@@ -1454,6 +1458,30 @@ const validateTxn = async ({ type, amount, accountId, toAccountId, category, not
     const toAccount = await prisma.account.findUnique({ where: { id: toAccountId } });
     if (!toAccount) return { error: 'The destination account does not exist' };
     toId = toAccountId;
+  }
+
+  // ── Insufficient-funds check (EXPENSE and TRANSFER only) ──────────────────
+  // We allow INCOME without restriction. For EXPENSE/TRANSFER we compute the
+  // current balance of the source account (optionally excluding a txn being
+  // edited) and reject if the amount would take it negative.
+  if (type === 'EXPENSE' || type === 'TRANSFER') {
+    const txnWhere = { OR: [{ accountId }, { toAccountId: accountId }] };
+    if (excludeTxnId) txnWhere.NOT = { id: excludeTxnId };
+
+    const existingTxns = await prisma.transaction.findMany({
+      where: txnWhere,
+      select: { type: true, amount: true, accountId: true, toAccountId: true },
+    });
+
+    const bal = computeBalances([account], existingTxns);
+    const currentBalance = bal[accountId] ?? account.openingBalance;
+
+    if (amt > currentBalance) {
+      const fmt = (n) => `₦${Number(n).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+      return {
+        error: `Insufficient funds — "${account.name}" has ${fmt(currentBalance)} but you're trying to ${type === 'TRANSFER' ? 'transfer' : 'spend'} ${fmt(amt)}.`,
+      };
+    }
   }
 
   return {
@@ -1494,7 +1522,7 @@ app.post('/api/transactions', requireAuth, requireAdmin, async (req, res) => {
 // ── PUT /api/transactions/:id ───────────────────────────────
 app.put('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { error, data } = await validateTxn(req.body);
+    const { error, data } = await validateTxn(req.body, req.params.id);
     if (error) return res.status(400).json({ error });
 
     const txn = await prisma.transaction.update({
@@ -1532,17 +1560,263 @@ app.delete('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) 
 });
 
 // ══════════════════════════════════════════════════════════
+// FORUM REST ROUTES  (all require auth)
+// ══════════════════════════════════════════════════════════
+
+// ── WebSocket broadcast helper — declared here so forum routes can use it ──
+const roomClients    = new Map(); // roomId → Set<ws>
+const allClients     = new Set(); // every connected ws
+
+const broadcastToRoom = (roomId, payload, excludeWs = null) => {
+  const clients = roomClients.get(roomId);
+  if (!clients) return;
+  const msg = JSON.stringify(payload);
+  clients.forEach(ws => {
+    if (ws !== excludeWs && ws.readyState === 1) ws.send(msg);
+  });
+};
+
+// Broadcast to every connected authenticated client (e.g. rooms list changed)
+const broadcastAll = (payload) => {
+  const msg = JSON.stringify(payload);
+  allClients.forEach(ws => {
+    if (ws.readyState === 1) ws.send(msg);
+  });
+};
+
+// ── Seed the General room exactly once ─────────────────────
+const seedGeneralRoom = async () => {
+  const generals = await prisma.forumRoom.findMany({
+    where: { isGeneral: true }, orderBy: { createdAt: 'asc' },
+  });
+
+  // Clean up any duplicates created by watch-mode restarts
+  if (generals.length > 1) {
+    const [, ...extras] = generals;
+    const extraIds = extras.map(r => r.id);
+    // Delete child rows first (SQLite may not honour cascade without pragma)
+    await prisma.forumMessage.deleteMany({ where: { roomId: { in: extraIds } } });
+    await prisma.forumMember.deleteMany({  where: { roomId: { in: extraIds } } });
+    await prisma.forumRoom.deleteMany({    where: { id:     { in: extraIds } } });
+    console.log(`Forum: removed ${extras.length} duplicate General room(s)`);
+  }
+
+  if (generals.length === 0) {
+    await prisma.forumRoom.create({
+      data: { name: 'General', description: 'Open chat for all members', isGeneral: true, createdBy: 'admin' },
+    });
+    console.log('Forum: seeded General room');
+  }
+};
+await seedGeneralRoom();
+
+// GET /api/forum/rooms — rooms the current user can see
+// General is always visible. Private rooms only if member.
+app.get('/api/forum/rooms', requireAuth, async (req, res) => {
+  try {
+    const rooms = await prisma.forumRoom.findMany({
+      orderBy: [{ isGeneral: 'desc' }, { createdAt: 'asc' }],
+      include: {
+        _count: { select: { messages: true, members: true } },
+        members: { where: { userId: req.user.userId }, select: { id: true } },
+      },
+    });
+    const visible = rooms.filter(r => r.isGeneral || r.members.length > 0 || req.user.role === 'admin');
+    res.json(visible.map(r => ({
+      id:          r.id,
+      name:        r.name,
+      description: r.description,
+      isGeneral:   r.isGeneral,
+      createdBy:   r.createdBy,
+      createdAt:   r.createdAt,
+      messageCount: r._count.messages,
+      memberCount:  r._count.members,
+      isMember:    r.isGeneral || r.members.length > 0,
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch rooms' });
+  }
+});
+
+// GET /api/forum/rooms/:id/users — list all users (admin only, for member management)
+app.get('/api/forum/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: { username: 'asc' },
+      select: { id: true, username: true, role: true },
+    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// POST /api/forum/rooms — create a new room (admin only)
+app.post('/api/forum/rooms', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { name, description, memberIds = [] } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Room name is required' });
+
+    const room = await prisma.forumRoom.create({
+      data: {
+        name:        name.trim(),
+        description: description?.trim() || null,
+        isGeneral:   false,
+        createdBy:   req.user.username,
+      },
+    });
+
+    // Add specified members one-by-one to avoid createMany + skipDuplicates
+    // (not supported reliably on SQLite in Prisma 5)
+    const ids = [...new Set([req.user.userId, ...memberIds])];
+    const validUsers = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true } });
+
+    for (const u of validUsers) {
+      try {
+        await prisma.forumMember.create({ data: { roomId: room.id, userId: u.id } });
+      } catch (e) {
+        if (e.code !== 'P2002') throw e; // ignore duplicate, rethrow anything else
+      }
+    }
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'CREATE_FORUM_ROOM', details: JSON.stringify({ roomId: room.id, name: room.name }) },
+    });
+
+    // Notify all connected clients so their room list refreshes immediately
+    broadcastAll({ type: 'ROOMS_UPDATED' });
+
+    res.status(201).json({ ...room, memberCount: validUsers.length, messageCount: 0, isMember: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create room' });
+  }
+});
+
+// PUT /api/forum/rooms/:id — rename / redescribe (admin only)
+app.put('/api/forum/rooms/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const data = {};
+    if (name !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: 'Room name cannot be empty' });
+      data.name = name.trim();
+    }
+    if (description !== undefined) data.description = description?.trim() || null;
+    const room = await prisma.forumRoom.update({ where: { id: req.params.id }, data });
+    res.json(room);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update room' });
+  }
+});
+
+// DELETE /api/forum/rooms/:id — delete non-general room (admin only)
+app.delete('/api/forum/rooms/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const room = await prisma.forumRoom.findUnique({ where: { id: req.params.id } });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (room.isGeneral) return res.status(400).json({ error: 'Cannot delete the General room' });
+    // Delete child rows first so SQLite FK constraints are satisfied
+    await prisma.forumMessage.deleteMany({ where: { roomId: req.params.id } });
+    await prisma.forumMember.deleteMany({  where: { roomId: req.params.id } });
+    await prisma.forumRoom.delete({ where: { id: req.params.id } });
+    res.json({ message: 'Room deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete room' });
+  }
+});
+
+// POST /api/forum/rooms/:id/members — add member (admin only)
+app.post('/api/forum/rooms/:id/members', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    try {
+      await prisma.forumMember.create({ data: { roomId: req.params.id, userId } });
+    } catch (e) {
+      if (e.code === 'P2002') return res.status(409).json({ error: 'User already a member' });
+      throw e;
+    }
+    // Tell all clients to refresh their room list — the newly added user will now see this room
+    broadcastAll({ type: 'ROOMS_UPDATED' });
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to add member' });
+  }
+});
+
+// DELETE /api/forum/rooms/:id/members/:userId — remove member (admin only)
+app.delete('/api/forum/rooms/:id/members/:userId', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    await prisma.forumMember.deleteMany({
+      where: { roomId: req.params.id, userId: req.params.userId },
+    });
+    broadcastAll({ type: 'ROOMS_UPDATED' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to remove member' });
+  }
+});
+
+// GET /api/forum/rooms/:id/members — list members
+app.get('/api/forum/rooms/:id/members', requireAuth, async (req, res) => {
+  try {
+    const members = await prisma.forumMember.findMany({
+      where: { roomId: req.params.id },
+      include: { user: { select: { id: true, username: true, role: true } } },
+      orderBy: { joinedAt: 'asc' },
+    });
+    res.json(members.map(m => ({ ...m.user, joinedAt: m.joinedAt })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch members' });
+  }
+});
+
+// GET /api/forum/rooms/:id/messages — last N messages (before cursor)
+app.get('/api/forum/rooms/:id/messages', requireAuth, async (req, res) => {
+  try {
+    // Access control: general is open to all; private rooms require membership
+    const room = await prisma.forumRoom.findUnique({ where: { id: req.params.id } });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    if (!room.isGeneral && req.user.role !== 'admin') {
+      const member = await prisma.forumMember.findUnique({
+        where: { roomId_userId: { roomId: req.params.id, userId: req.user.userId } },
+      });
+      if (!member) return res.status(403).json({ error: 'Not a member of this room' });
+    }
+
+    const limit  = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+    const before = req.query.before; // ISO timestamp cursor for pagination
+    const where  = { roomId: req.params.id };
+    if (before) {
+      const d = new Date(before);
+      if (!isNaN(d)) where.createdAt = { lt: d };
+    }
+
+    const messages = await prisma.forumMessage.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    res.json(messages.reverse()); // return oldest-first
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
 // SERVE FRONTEND  (production build, if present)
 // ══════════════════════════════════════════════════════════
-// In production the backend also serves the compiled React app, so a single
-// reverse proxy (Apache → this port) handles both the UI and the API.
-// In local dev there is no build, so this block is skipped and Vite serves the UI.
-const distDir   = path.join(__dirname, '../frontend/dist');
+const distDir = path.join(__dirname, '../frontend/dist');
 
 if (fs.existsSync(distDir)) {
   app.use(express.static(distDir));
-
-  // SPA fallback: any non-API GET that didn't match a static asset → index.html
   app.use((req, res, next) => {
     if (req.method === 'GET' && !req.path.startsWith('/api')) {
       return res.sendFile(path.join(distDir, 'index.html'));
@@ -1551,8 +1825,106 @@ if (fs.existsSync(distDir)) {
   });
 }
 
-// ── Start ─────────────────────────────────────────────────
-const PORT = process.env.PORT || 5000;
-// Express 5 returns a Promise from listen() — await it so the process stays alive
-await app.listen(PORT);
+// ══════════════════════════════════════════════════════════
+// HTTP SERVER + WEBSOCKET  (forum real-time)
+// ══════════════════════════════════════════════════════════
+const PORT       = process.env.PORT || 5000;
+const httpServer = http.createServer(app);
+const wss        = new WebSocketServer({ server: httpServer });
+
+// Verify JWT from WS query string (?token=...)
+const verifyWsToken = (req) => {
+  try {
+    const url   = new URL(req.url, 'http://localhost');
+    const token = url.searchParams.get('token');
+    if (!token) return null;
+    return jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return null;
+  }
+};
+
+wss.on('connection', async (ws, req) => {
+  const user = verifyWsToken(req);
+  if (!user) { ws.close(4001, 'Unauthorized'); return; }
+
+  ws.userId   = user.userId;
+  ws.username = user.username;
+  ws.role     = user.role;
+  ws.roomId   = null;
+
+  // Track every live connection so we can broadcast room-list updates to all users
+  allClients.add(ws);
+
+  ws.on('message', async (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    // ── JOIN ─────────────────────────────────────────────
+    if (msg.type === 'JOIN') {
+      const { roomId } = msg;
+      if (!roomId) return;
+
+      try {
+        const room = await prisma.forumRoom.findUnique({ where: { id: roomId } });
+        if (!room) return ws.send(JSON.stringify({ type: 'ERROR', error: 'Room not found' }));
+
+        if (!room.isGeneral && ws.role !== 'admin') {
+          const member = await prisma.forumMember.findUnique({
+            where: { roomId_userId: { roomId, userId: ws.userId } },
+          });
+          if (!member) return ws.send(JSON.stringify({ type: 'ERROR', error: 'Not a member' }));
+        }
+      } catch {
+        return ws.send(JSON.stringify({ type: 'ERROR', error: 'Join failed' }));
+      }
+
+      if (ws.roomId && roomClients.has(ws.roomId)) {
+        roomClients.get(ws.roomId).delete(ws);
+      }
+      ws.roomId = roomId;
+      if (!roomClients.has(roomId)) roomClients.set(roomId, new Set());
+      roomClients.get(roomId).add(ws);
+      ws.send(JSON.stringify({ type: 'JOINED', roomId }));
+    }
+
+    // ── SEND MESSAGE ─────────────────────────────────────
+    if (msg.type === 'MESSAGE') {
+      const body = (msg.body || '').trim();
+      if (!body || !ws.roomId) return;
+      if (body.length > 2000) return ws.send(JSON.stringify({ type: 'ERROR', error: 'Message too long' }));
+      try {
+        const saved = await prisma.forumMessage.create({
+          data: { roomId: ws.roomId, userId: ws.userId, username: ws.username, body },
+        });
+        broadcastToRoom(ws.roomId, { type: 'MESSAGE', message: saved });
+      } catch (err) {
+        console.error('WS message save error:', err);
+        ws.send(JSON.stringify({ type: 'ERROR', error: 'Failed to send message' }));
+      }
+    }
+
+    // ── DELETE MESSAGE (admin or own) ────────────────────
+    if (msg.type === 'DELETE_MESSAGE') {
+      const { messageId } = msg;
+      if (!messageId || !ws.roomId) return;
+      try {
+        const existing = await prisma.forumMessage.findUnique({ where: { id: messageId } });
+        if (!existing) return;
+        if (existing.userId !== ws.userId && ws.role !== 'admin') return;
+        await prisma.forumMessage.delete({ where: { id: messageId } });
+        broadcastToRoom(ws.roomId, { type: 'MESSAGE_DELETED', messageId });
+      } catch { /* ignore */ }
+    }
+  });
+
+  ws.on('close', () => {
+    allClients.delete(ws);
+    if (ws.roomId && roomClients.has(ws.roomId)) {
+      roomClients.get(ws.roomId).delete(ws);
+    }
+  });
+});
+
+await httpServer.listen(PORT);
 console.log(`Server running on port ${PORT}`);

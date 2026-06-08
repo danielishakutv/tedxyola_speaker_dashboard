@@ -15,6 +15,7 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   activities    Activity[]
+  forumMemberships ForumMember[]
 }
 
 model Speaker {
@@ -120,6 +121,44 @@ model Transaction {
   createdBy   String?  // username who recorded it
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+// ── Forum ───────────────────────────────────────────────────
+// Rooms are chat channels. The "general" room is seeded automatically and
+// open to every authenticated user. All other rooms are admin-created and
+// membership is explicit (ForumMember rows).
+model ForumRoom {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  isGeneral   Boolean       @default(false) // exactly one room has this true
+  createdBy   String        // username of admin who created it
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  messages    ForumMessage[]
+  members     ForumMember[]
+}
+
+model ForumMember {
+  id        String    @id @default(uuid())
+  roomId    String
+  room      ForumRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime  @default(now())
+
+  @@unique([roomId, userId])
+}
+
+model ForumMessage {
+  id        String    @id @default(uuid())
+  roomId    String
+  room      ForumRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  username  String    // denormalised for fast reads
+  body      String
+  createdAt DateTime  @default(now())
 }
 
 model Popup {

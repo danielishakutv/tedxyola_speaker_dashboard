@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
 import {
-  CURRENCY_SYMBOL, INCOME_CATEGORIES, EXPENSE_CATEGORIES, todayInput, accountTypeLabel,
+  CURRENCY_SYMBOL, INCOME_CATEGORIES, EXPENSE_CATEGORIES, todayInput, accountTypeLabel, formatNaira,
 } from '../utils/finance';
 import './AccountForm.css';
 import './TransactionForm.css';
@@ -29,6 +29,8 @@ const TransactionForm = () => {
   const [loading,      setLoading]      = useState(false);
   const [fetchLoading, setFetchLoading] = useState(true);
   const [errors,       setErrors]       = useState({});
+  // top-level server error (e.g. insufficient funds returned by API)
+  const [submitError,  setSubmitError]  = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -52,7 +54,6 @@ const TransactionForm = () => {
             });
           }
         } else if (accData.length) {
-          // Pre-select the first non-archived account for convenience
           const first = accData.find(a => !a.archived) || accData[0];
           setFormData(prev => ({ ...prev, accountId: first.id }));
         }
@@ -68,33 +69,53 @@ const TransactionForm = () => {
     setFormData(prev => ({
       ...prev,
       type,
-      // category is meaningless for transfers; clear destination when leaving transfer
       category:    type === 'TRANSFER' ? '' : prev.category,
       toAccountId: type === 'TRANSFER' ? prev.toAccountId : '',
     }));
     setErrors({});
+    setSubmitError(null);
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
+    if (submitError)  setSubmitError(null);
   };
 
+  // Derive the current balance for any account from the accounts list
+  // (the GET /api/accounts endpoint already computes and returns balance)
+  const balanceOf = (accountId) => {
+    const acc = accounts.find(a => a.id === accountId);
+    return acc?.balance ?? null;
+  };
+
+  // Client-side check: amount > balance for EXPENSE / TRANSFER
   const validate = () => {
     const errs = {};
     const amt = parseFloat(formData.amount);
     if (!formData.amount || isNaN(amt) || amt <= 0) errs.amount = 'Enter an amount greater than 0';
     if (!formData.accountId) errs.accountId = 'Select an account';
+
     if (formData.type === 'TRANSFER') {
       if (!formData.toAccountId) errs.toAccountId = 'Select a destination account';
       else if (formData.toAccountId === formData.accountId) errs.toAccountId = 'Must differ from the source account';
     }
+
+    // Warn before even hitting the server
+    if ((formData.type === 'EXPENSE' || formData.type === 'TRANSFER') && formData.accountId && !isNaN(amt) && amt > 0) {
+      const bal = balanceOf(formData.accountId);
+      if (bal !== null && amt > bal) {
+        errs.amount = `Insufficient funds — available balance is ${formatNaira(bal)}`;
+      }
+    }
+
     return errs;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError(null);
     const validationErrors = validate();
     if (Object.keys(validationErrors).length) {
       setErrors(validationErrors);
@@ -117,11 +138,13 @@ const TransactionForm = () => {
       );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to save transaction');
+        // Surface insufficient-funds (and other API errors) inline instead of alert
+        setSubmitError(data.error || 'Failed to save transaction');
+        return;
       }
       navigate('/transactions');
     } catch (err) {
-      alert(err.message || 'Error saving transaction. Is the backend running?');
+      setSubmitError(err.message || 'Error saving transaction. Is the backend running?');
     } finally {
       setLoading(false);
     }
@@ -136,6 +159,14 @@ const TransactionForm = () => {
     type === 'EXPENSE' ? 'Pay from'     : 'From account';
 
   const accountOption = (a) => `${a.name}${a.archived ? ' (archived)' : ''} · ${accountTypeLabel(a.type)}`;
+
+  // Balance hint shown under the account selector for EXPENSE / TRANSFER
+  const sourceBalance = (type === 'EXPENSE' || type === 'TRANSFER') && formData.accountId
+    ? balanceOf(formData.accountId)
+    : null;
+
+  const enteredAmt = parseFloat(formData.amount);
+  const balanceInsufficient = sourceBalance !== null && !isNaN(enteredAmt) && enteredAmt > sourceBalance;
 
   if (!accounts.length) {
     return (
@@ -177,6 +208,14 @@ const TransactionForm = () => {
 
       <form className="form-section card" onSubmit={handleSubmit}>
 
+        {/* Top-level API error banner */}
+        {submitError && (
+          <div className="form-error-banner">
+            <AlertCircle size={15} />
+            <span>{submitError}</span>
+          </div>
+        )}
+
         {/* Type toggle */}
         <div className="txn-type-toggle">
           {TYPES.map(t => (
@@ -196,9 +235,17 @@ const TransactionForm = () => {
             <div className="input-with-prefix">
               <span className="input-prefix">{CURRENCY_SYMBOL}</span>
               <input type="number" name="amount" value={formData.amount} onChange={handleChange}
-                placeholder="0" step="0.01" min="0" className={errors.amount ? 'input-error' : ''} />
+                placeholder="0" step="0.01" min="0"
+                className={errors.amount || balanceInsufficient ? 'input-error' : ''} />
             </div>
-            {errors.amount && <span className="field-error"><AlertCircle size={12} />{errors.amount}</span>}
+            {errors.amount
+              ? <span className="field-error"><AlertCircle size={12} />{errors.amount}</span>
+              : sourceBalance !== null && (
+                  <span className={`field-hint ${balanceInsufficient ? 'field-hint-danger' : ''}`}>
+                    Available: {formatNaira(sourceBalance)}
+                  </span>
+                )
+            }
           </div>
 
           <div className="form-group">

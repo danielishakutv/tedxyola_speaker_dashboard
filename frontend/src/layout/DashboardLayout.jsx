@@ -13,6 +13,7 @@ const PAGE_TITLES = {
   '/popups': 'Popups',
   '/media': 'Media Library',
   '/links': 'Links & QR Codes',
+  '/forum': 'Forum',
   '/accounts/new': 'Add Account',
   '/accounts': 'Accounts & Finance',
   '/transactions/new': 'Record Transaction',
@@ -57,6 +58,8 @@ const DashboardLayout = () => {
     ? 'Edit Transaction'
     : PAGE_TITLES[pathKey] || 'Dashboard';
 
+  const isForumPage = location.pathname.startsWith('/forum');
+
   const avatarLetter = user?.username?.charAt(0).toUpperCase() || 'U';
   const isAdmin = user?.role === 'admin';
 
@@ -95,7 +98,7 @@ const DashboardLayout = () => {
             </div>
           </div>
         </header>
-        <div className="content-area">
+        <div className={`content-area${isForumPage ? ' content-area--flush' : ''}`}>
           <Outlet />
         </div>
       </main>

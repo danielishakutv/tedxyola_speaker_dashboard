@@ -132,6 +132,14 @@
   overflow-x: hidden;
 }
 
+/* Forum fills the full content area — no padding, no overflow clip */
+.content-area--flush {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Backdrop behind the mobile drawer */
 .sidebar-overlay {
   display: none;

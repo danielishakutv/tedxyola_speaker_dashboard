@@ -19,6 +19,7 @@ import Accounts from './pages/Accounts';
 import AccountForm from './pages/AccountForm';
 import Transactions from './pages/Transactions';
 import TransactionForm from './pages/TransactionForm';
+import Forum from './pages/Forum';
 import './App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -74,6 +75,7 @@ function App() {
           <Route path="transactions" element={<AdminRoute><Transactions /></AdminRoute>} />
           <Route path="transactions/new" element={<AdminRoute><TransactionForm /></AdminRoute>} />
           <Route path="transactions/edit/:id" element={<AdminRoute><TransactionForm /></AdminRoute>} />
+          <Route path="forum" element={<PrivateRoute><Forum /></PrivateRoute>} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
           <Route path="commit-logs" element={<AdminRoute><CommitLogs /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
