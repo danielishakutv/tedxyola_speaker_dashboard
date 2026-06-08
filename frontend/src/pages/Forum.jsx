@@ -332,13 +332,11 @@ const Forum = () => {
   useEffect(() => {
     if (!activeRoom) return;
     const token   = getToken();
-    const isDev   = import.meta.env.DEV;
     const wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const wsUrl   = isDev
-      ? `${wsProto}://${window.location.host}/ws?token=${token}`
-      : import.meta.env.VITE_API_URL
-        ? `${import.meta.env.VITE_API_URL.replace(/^https?/, wsProto)}?token=${token}`
-        : `${wsProto}://${window.location.hostname}:5000?token=${token}`;
+    // Always connect same-origin to /ws. The reverse proxy upgrades it to the
+    // backend WebSocket (Apache → 127.0.0.1:5000 in prod; the Vite dev-server
+    // proxy in dev). Connecting to a bare host or :5000 fails behind Cloudflare.
+    const wsUrl   = `${wsProto}://${window.location.host}/ws?token=${token}`;
 
     const ws      = new WebSocket(wsUrl);
     wsRef.current = ws;
