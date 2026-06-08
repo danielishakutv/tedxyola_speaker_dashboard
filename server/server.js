@@ -103,6 +103,21 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Gate access on the account lifecycle status. Credentials are correct, but
+    // the account may not yet be cleared to use the platform.
+    if (user.status === 'PENDING') {
+      return res.status(403).json({
+        error: 'Your account is awaiting administrator approval. You will be able to sign in once it has been approved.',
+        status: 'PENDING',
+      });
+    }
+    if (user.status === 'REJECTED') {
+      return res.status(403).json({
+        error: 'Your account is not active. Please contact an administrator.',
+        status: 'REJECTED',
+      });
+    }
+
     // Log the login activity
     await prisma.activity.create({
       data: {
@@ -113,12 +128,23 @@ app.post('/api/auth/login', async (req, res) => {
     });
 
     const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
+      {
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+      },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    res.json({ token, username: user.username, userId: user.id });
+    res.json({
+      token,
+      username: user.username,
+      userId: user.id,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Login failed' });
@@ -127,7 +153,274 @@ app.post('/api/auth/login', async (req, res) => {
 
 // GET /api/auth/me  — verify token and return user info
 app.get('/api/auth/me', requireAuth, (req, res) => {
-  res.json({ username: req.user.username, role: req.user.role, userId: req.user.userId });
+  res.json({
+    username: req.user.username,
+    role: req.user.role,
+    userId: req.user.userId,
+    mustChangePassword: req.user.mustChangePassword ?? false,
+  });
+});
+
+// POST /api/auth/register — public self-registration.
+// Creates a PENDING account that cannot sign in until an admin approves it.
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const username = (req.body.username || '').trim();
+    const name     = (req.body.name || '').trim();
+    const password = req.body.password || '';
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+    if (username.length < 3) {
+      return res.status(400).json({ error: 'Username must be at least 3 characters' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { username } });
+    if (existing) {
+      return res.status(409).json({ error: 'That username is already taken' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        username,
+        name: name || null,
+        passwordHash,
+        role: 'editor',       // self-registered users are editors; admin can promote
+        status: 'PENDING',    // must be approved before they can sign in
+        mustChangePassword: false,
+      },
+    });
+
+    // Record the registration in the audit log (actor is the new user)
+    await prisma.activity.create({
+      data: {
+        userId: user.id,
+        action: 'REGISTER',
+        details: JSON.stringify({ username: user.username }),
+      },
+    });
+
+    res.status(201).json({
+      message: 'Account created. An administrator must approve it before you can sign in.',
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// POST /api/auth/change-password — the signed-in user sets a new password.
+// Used both for the forced change after an admin reset and for voluntary changes.
+app.post('/api/auth/change-password', requireAuth, async (req, res) => {
+  try {
+    const currentPassword = req.body.currentPassword || '';
+    const newPassword     = req.body.newPassword || '';
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      return res.status(400).json({ error: 'New password must be different from the current one' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash, mustChangePassword: false },
+    });
+
+    await prisma.activity.create({
+      data: { userId: user.id, action: 'CHANGE_PASSWORD', details: JSON.stringify({ username: user.username }) },
+    });
+
+    // Issue a fresh token so the client drops the mustChangePassword flag immediately.
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, role: user.role, mustChangePassword: false },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ token, message: 'Password updated' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// USER MANAGEMENT  (admin only)
+// ══════════════════════════════════════════════════════════
+const USER_PUBLIC_FIELDS = {
+  id: true, username: true, name: true, role: true,
+  status: true, mustChangePassword: true, createdAt: true, updatedAt: true,
+};
+
+// Readable one-time password handed to a user after an admin reset.
+const generateTempPassword = () => `Tedx@${uuidv4().replace(/-/g, '').slice(0, 8)}`;
+
+// GET /api/users — list every account (newest pending first so approvals are easy to spot)
+app.get('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      orderBy: [{ createdAt: 'desc' }],
+      select: USER_PUBLIC_FIELDS,
+    });
+    res.json(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+// POST /api/users — admin creates an account directly (auto-approved).
+// Optionally force a password change on first login.
+app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const username = (req.body.username || '').trim();
+    const name     = (req.body.name || '').trim();
+    const password = req.body.password || '';
+    const role     = req.body.role === 'admin' ? 'admin' : 'editor';
+    const requireChange = req.body.requirePasswordChange === true;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
+    }
+    if (username.length < 3) {
+      return res.status(400).json({ error: 'Username must be at least 3 characters' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { username } });
+    if (existing) return res.status(409).json({ error: 'That username is already taken' });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        username, name: name || null, passwordHash, role,
+        status: 'APPROVED', mustChangePassword: requireChange,
+      },
+      select: USER_PUBLIC_FIELDS,
+    });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'CREATE_USER', details: JSON.stringify({ username, role }) },
+    });
+
+    res.status(201).json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
+// PATCH /api/users/:id — change status (approve/reject), role, or name.
+app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { status, role, name } = req.body;
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
+    const isSelf = target.id === req.user.userId;
+    const data = {};
+
+    if (status !== undefined) {
+      if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid status' });
+      }
+      // Guard against an admin locking themselves out of their own account.
+      if (isSelf && status !== 'APPROVED') {
+        return res.status(400).json({ error: 'You cannot change the status of your own account' });
+      }
+      data.status = status;
+    }
+
+    if (role !== undefined) {
+      if (!['admin', 'editor'].includes(role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+      }
+      if (isSelf && role !== 'admin') {
+        return res.status(400).json({ error: 'You cannot change your own role' });
+      }
+      // Don't allow demoting the last remaining admin.
+      if (target.role === 'admin' && role !== 'admin') {
+        const adminCount = await prisma.user.count({ where: { role: 'admin', status: 'APPROVED' } });
+        if (adminCount <= 1) {
+          return res.status(400).json({ error: 'At least one admin must remain' });
+        }
+      }
+      data.role = role;
+    }
+
+    if (name !== undefined) data.name = (name || '').trim() || null;
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: target.id }, data, select: USER_PUBLIC_FIELDS,
+    });
+
+    const action = data.status === 'APPROVED' ? 'APPROVE_USER'
+                 : data.status === 'REJECTED' ? 'REJECT_USER'
+                 : data.role !== undefined     ? 'UPDATE_USER_ROLE'
+                 : 'UPDATE_USER';
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action, details: JSON.stringify({ username: target.username, ...data }) },
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// POST /api/users/:id/reset-password — set a new (or generated) password and
+// require the user to change it on next login. Returns the temp password once.
+app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
+    let newPassword = (req.body.newPassword || '').trim();
+    if (newPassword && newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    if (!newPassword) newPassword = generateTempPassword();
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: target.id },
+      data: { passwordHash, mustChangePassword: true },
+    });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'RESET_PASSWORD', details: JSON.stringify({ username: target.username }) },
+    });
+
+    res.json({ tempPassword: newPassword, username: target.username });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
 });
 
 // GET /api/activities — activity logs

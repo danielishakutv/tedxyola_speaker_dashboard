@@ -46,11 +46,53 @@
   font-size: 0.9rem;
 }
 
+/* Sign-in / Create-account toggle */
+.login-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin-bottom: 1.5rem;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.login-tab {
+  flex: 1;
+  padding: 0.55rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.login-tab:hover {
+  color: var(--text-secondary);
+  background: transparent;
+}
+
+.login-tab.active {
+  color: var(--text-main);
+  background-color: var(--bg-card-hover);
+  border: 1px solid var(--border-light);
+}
+
 .login-form {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
   text-align: left;
+}
+
+.form-group label .optional {
+  text-transform: none;
+  letter-spacing: 0;
+  color: #555;
+  font-weight: 400;
 }
 
 .form-group {
@@ -82,6 +124,40 @@
   animation: shake 0.3s ease-in-out;
 }
 
+.notice-message {
+  color: var(--success);
+  background-color: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 6px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.login-switch {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.login-link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--ted-red);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-link:hover {
+  color: var(--ted-red-hover);
+  background: none;
+  text-decoration: underline;
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-4px); }
@@ -94,6 +170,30 @@
   border-top: 1px solid var(--border-color);
   color: var(--text-muted);
   font-size: 0.8rem;
+}
+
+/* Forced-password-change banner */
+.cp-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  text-align: left;
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 0.85rem;
+  background-color: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 8px;
+  color: var(--warning);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.cp-banner svg { flex-shrink: 0; margin-top: 1px; }
+
+.cp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 @media (max-width: 480px) {

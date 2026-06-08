@@ -20,23 +20,38 @@ import AccountForm from './pages/AccountForm';
 import Transactions from './pages/Transactions';
 import TransactionForm from './pages/TransactionForm';
 import Forum from './pages/Forum';
+import Users from './pages/Users';
+import ChangePassword from './pages/ChangePassword';
 import './App.css';
 
-const PrivateRoute = ({ children }) => {
-  const token = localStorage.getItem('tedx_token');
-  return token ? children : <Navigate to="/login" replace />;
-};
-
-const getRoleFromToken = (token) => {
+const decodeToken = (token) => {
   try {
     const parts = token.split('.');
     if (parts.length < 2) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return payload.role || null;
+    return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
   } catch {
     return null;
   }
 };
+
+// Guards dashboard routes: needs a token, and if an admin reset the password the
+// user is forced to /change-password before they can reach anything else.
+const PrivateRoute = ({ children }) => {
+  const token = localStorage.getItem('tedx_token');
+  if (!token) return <Navigate to="/login" replace />;
+  const payload = decodeToken(token);
+  if (payload?.mustChangePassword) return <Navigate to="/change-password" replace />;
+  return children;
+};
+
+// Lighter guard for the change-password page itself: only requires a token
+// (must stay reachable while mustChangePassword is true).
+const AuthedRoute = ({ children }) => {
+  const token = localStorage.getItem('tedx_token');
+  return token ? children : <Navigate to="/login" replace />;
+};
+
+const getRoleFromToken = (token) => decodeToken(token)?.role || null;
 
 const AdminRoute = ({ children }) => {
   const token = localStorage.getItem('tedx_token');
@@ -50,6 +65,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/change-password" element={<AuthedRoute><ChangePassword /></AuthedRoute>} />
 
         {/* <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}> */}
         <Route path="/" element={<PrivateRoute><DashboardLayout /></PrivateRoute>}>
@@ -78,6 +94,7 @@ function App() {
           <Route path="forum" element={<PrivateRoute><Forum /></PrivateRoute>} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
           <Route path="commit-logs" element={<AdminRoute><CommitLogs /></AdminRoute>} />
+          <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
         </Route>
       </Routes>

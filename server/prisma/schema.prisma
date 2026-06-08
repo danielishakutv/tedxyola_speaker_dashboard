@@ -10,8 +10,16 @@ datasource db {
 model User {
   id            String   @id @default(uuid())
   username      String   @unique
+  name          String?  // optional display name (collected at self-registration)
   passwordHash  String
   role          String   @default("admin") // "admin" or "editor"
+  // Account lifecycle. Defaults to APPROVED so every pre-existing user (admins,
+  // editors) stays unlocked after `prisma db push`. Self-registration explicitly
+  // sets PENDING; an admin then approves (APPROVED) or blocks (REJECTED).
+  status        String   @default("APPROVED") // "PENDING" | "APPROVED" | "REJECTED"
+  // When true, the user is forced to set a new password on their next login
+  // (set by an admin password reset). Cleared once they change it.
+  mustChangePassword Boolean @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   activities    Activity[]

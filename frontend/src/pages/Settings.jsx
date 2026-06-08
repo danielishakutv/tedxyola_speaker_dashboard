@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Server, RefreshCw, LogOut, CheckCircle, AlertTriangle,
   Activity, LogIn, Plus, Edit2, Trash2, Clock, User, Shield,
-  ChevronDown, ChevronUp, Filter, Calendar
+  ChevronDown, ChevronUp, Filter, Calendar,
+  UserCog, KeyRound, UserPlus, UserCheck, UserX
 } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
 import './Settings.css';
@@ -23,6 +24,14 @@ const ACTION_CONFIG = {
   DELETE_SPEAKER: { label: 'Deleted speaker', color: 'red',    icon: Trash2 },
   UPLOAD_MEDIA:   { label: 'Uploaded image',  color: 'green',  icon: Plus   },
   DELETE_MEDIA:   { label: 'Deleted image',   color: 'red',    icon: Trash2 },
+  REGISTER:        { label: 'Registered',      color: 'blue',   icon: UserPlus  },
+  CREATE_USER:     { label: 'Created user',     color: 'green',  icon: UserPlus  },
+  APPROVE_USER:    { label: 'Approved user',    color: 'green',  icon: UserCheck },
+  REJECT_USER:     { label: 'Blocked user',     color: 'red',    icon: UserX     },
+  UPDATE_USER_ROLE:{ label: 'Changed role',     color: 'yellow', icon: Shield    },
+  UPDATE_USER:     { label: 'Updated user',     color: 'yellow', icon: Edit2     },
+  RESET_PASSWORD:  { label: 'Reset password',   color: 'yellow', icon: KeyRound  },
+  CHANGE_PASSWORD: { label: 'Changed password', color: 'blue',   icon: KeyRound  },
 };
 
 const getActionConfig = (action) =>
@@ -223,7 +232,17 @@ const Settings = () => {
             </div>
           </div>
 
-          <div className="st-card-action">
+          <div className="st-card-action st-account-actions">
+            {adminUser?.role === 'admin' && (
+              <button className="btn secondary st-account-btn" onClick={() => navigate('/users')}>
+                <UserCog size={13} />
+                Manage Users
+              </button>
+            )}
+            <button className="btn secondary st-account-btn" onClick={() => navigate('/change-password')}>
+              <KeyRound size={13} />
+              Change Password
+            </button>
             <button className="st-logout-btn" onClick={handleLogout}>
               <LogOut size={13} />
               Sign Out

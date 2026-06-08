@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon, Building, FileText, Link2, MessageSquare, Terminal, GitCommit, ChevronDown, Wallet, ArrowLeftRight, Hash } from 'lucide-react';
+import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon, Building, FileText, Link2, MessageSquare, Terminal, GitCommit, ChevronDown, Wallet, ArrowLeftRight, Hash, UserCog } from 'lucide-react';
 import './Sidebar.css';
 
 const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
@@ -147,6 +147,15 @@ const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
                   </li>
                 </ul>
               )}
+            </li>
+          )}
+
+          {isAdmin && (
+            <li>
+              <NavLink to="/users" className="nav-item" onClick={onClose}>
+                <UserCog size={18} />
+                <span>Users</span>
+              </NavLink>
             </li>
           )}
 

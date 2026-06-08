@@ -214,6 +214,20 @@
   border-top: 1px solid var(--border-color);
 }
 
+.st-account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.st-account-btn {
+  width: 100%;
+  justify-content: center;
+  font-size: 0.8rem;
+  padding: 0.5rem;
+  gap: 0.4rem;
+}
+
 .st-refresh-btn {
   width: 100%;
   justify-content: center;

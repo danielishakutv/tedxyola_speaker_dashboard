@@ -20,6 +20,7 @@ const PAGE_TITLES = {
   '/transactions': 'Transactions',
   '/api-docs': 'API Documentation',
   '/commit-logs': 'Commit Logs',
+  '/users': 'User Management',
   '/settings': 'Settings',
 };
 
