@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon, Building, FileText, Link2, MessageSquare, Terminal, GitCommit, ChevronDown } from 'lucide-react';
+import { Users, LogOut, Settings, LayoutDashboard, Code, X, ImageIcon, Building, FileText, Link2, MessageSquare, Terminal, GitCommit, ChevronDown, Wallet, ArrowLeftRight } from 'lucide-react';
 import './Sidebar.css';
 
 const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
@@ -10,6 +10,10 @@ const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
   // Auto-open the Developer dropdown when on a developer sub-page
   const isDevPage = location.pathname === '/api-docs' || location.pathname === '/commit-logs';
   const [devOpen, setDevOpen] = useState(isDevPage);
+
+  // Auto-open the Accounts dropdown when on a finance sub-page
+  const isFinancePage = location.pathname.startsWith('/accounts') || location.pathname.startsWith('/transactions');
+  const [financeOpen, setFinanceOpen] = useState(isFinancePage);
 
   const handleLogout = () => {
     localStorage.removeItem('tedx_token');
@@ -69,6 +73,41 @@ const Sidebar = ({ isOpen = false, onClose = () => {}, isAdmin = false }) => {
               <span>Links &amp; QR</span>
             </NavLink>
           </li>
+
+          {/* ── Accounts dropdown (admin only) ─────────── */}
+          {isAdmin && (
+            <li className="nav-group">
+              <button
+                className={`nav-item nav-group-trigger ${isFinancePage ? 'active' : ''}`}
+                onClick={() => setFinanceOpen(o => !o)}
+                aria-expanded={financeOpen}
+              >
+                <Wallet size={18} />
+                <span>Accounts</span>
+                <ChevronDown
+                  size={14}
+                  className={`nav-chevron ${financeOpen ? 'open' : ''}`}
+                />
+              </button>
+
+              {financeOpen && (
+                <ul className="nav-sub-list">
+                  <li>
+                    <NavLink to="/accounts" end className="nav-item nav-sub-item" onClick={onClose}>
+                      <LayoutDashboard size={15} />
+                      <span>Overview</span>
+                    </NavLink>
+                  </li>
+                  <li>
+                    <NavLink to="/transactions" className="nav-item nav-sub-item" onClick={onClose}>
+                      <ArrowLeftRight size={15} />
+                      <span>Transactions</span>
+                    </NavLink>
+                  </li>
+                </ul>
+              )}
+            </li>
+          )}
 
           {/* ── Developer dropdown ─────────────────────── */}
           {isAdmin && (

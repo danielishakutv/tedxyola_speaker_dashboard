@@ -69,6 +69,15 @@ const requireAuth = (req, res, next) => {
   }
 };
 
+// ── Admin-only guard — use AFTER requireAuth ──────────────
+// Sensitive areas (e.g. Accounts/Finance) are restricted to admins.
+const requireAdmin = (req, res, next) => {
+  if (req.user?.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden — admin access required' });
+  }
+  next();
+};
+
 // ══════════════════════════════════════════════════════════
 // AUTH ROUTES
 // ══════════════════════════════════════════════════════════
@@ -1158,6 +1167,367 @@ app.get('/api/commits', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('GitHub proxy error:', err);
     res.status(500).json({ error: 'Failed to fetch commits' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// ACCOUNTS & FINANCE ROUTES  (admin only)
+// ══════════════════════════════════════════════════════════
+// "Accounts" are where money lives (cash, bank, mobile money). Balances are
+// always COMPUTED from openingBalance + every transaction touching the account,
+// so they can never drift. Transactions are INCOME, EXPENSE, or TRANSFER.
+
+const TXN_TYPES = ['INCOME', 'EXPENSE', 'TRANSFER'];
+const ACCOUNT_TYPES = ['CASH', 'BANK', 'MOBILE', 'OTHER'];
+
+// Compute a { accountId: balance } map from accounts + their transactions.
+const computeBalances = (accounts, txns) => {
+  const bal = {};
+  accounts.forEach(a => { bal[a.id] = a.openingBalance || 0; });
+  for (const t of txns) {
+    if (t.type === 'INCOME') {
+      if (t.accountId in bal) bal[t.accountId] += t.amount;
+    } else if (t.type === 'EXPENSE') {
+      if (t.accountId in bal) bal[t.accountId] -= t.amount;
+    } else if (t.type === 'TRANSFER') {
+      if (t.accountId in bal)            bal[t.accountId]   -= t.amount;
+      if (t.toAccountId && t.toAccountId in bal) bal[t.toAccountId] += t.amount;
+    }
+  }
+  return bal;
+};
+
+const parseAmount = (v) => {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : NaN;
+};
+
+const parseTxnDate = (v) => {
+  if (v === undefined || v === null || String(v).trim() === '') return new Date();
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? new Date() : d;
+};
+
+// ── GET /api/accounts — all accounts with computed balances ──
+app.get('/api/accounts', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const [accounts, txns] = await Promise.all([
+      prisma.account.findMany({ orderBy: { createdAt: 'asc' } }),
+      prisma.transaction.findMany({ select: { type: true, amount: true, accountId: true, toAccountId: true } }),
+    ]);
+    const bal = computeBalances(accounts, txns);
+    res.json(accounts.map(a => ({ ...a, balance: bal[a.id] ?? a.openingBalance })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch accounts' });
+  }
+});
+
+// ── GET /api/accounts/:id — single account + recent transactions ──
+app.get('/api/accounts/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const account = await prisma.account.findUnique({ where: { id: req.params.id } });
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+
+    const txns = await prisma.transaction.findMany({
+      where: { OR: [{ accountId: account.id }, { toAccountId: account.id }] },
+      include: { account: { select: { name: true } }, toAccount: { select: { name: true } } },
+      orderBy: { date: 'desc' },
+    });
+    const allForBalance = txns.map(t => ({ type: t.type, amount: t.amount, accountId: t.accountId, toAccountId: t.toAccountId }));
+    const bal = computeBalances([account], allForBalance);
+
+    res.json({ ...account, balance: bal[account.id], transactions: txns });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch account' });
+  }
+});
+
+// ── POST /api/accounts ──────────────────────────────────────
+app.post('/api/accounts', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { name, type, description, openingBalance } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Account name is required' });
+
+    const opening = parseAmount(openingBalance);
+    const account = await prisma.account.create({
+      data: {
+        name:           name.trim(),
+        type:           ACCOUNT_TYPES.includes(type) ? type : 'BANK',
+        description:    description?.trim() || null,
+        openingBalance: Number.isFinite(opening) ? opening : 0,
+      },
+    });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'CREATE_ACCOUNT', details: JSON.stringify({ accountId: account.id, name: account.name }) },
+    });
+
+    res.status(201).json(account);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// ── PUT /api/accounts/:id ───────────────────────────────────
+app.put('/api/accounts/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { name, type, description, openingBalance, archived } = req.body;
+    const data = {};
+    if (name        !== undefined) {
+      if (!name.trim()) return res.status(400).json({ error: 'Account name cannot be empty' });
+      data.name = name.trim();
+    }
+    if (type        !== undefined && ACCOUNT_TYPES.includes(type)) data.type = type;
+    if (description !== undefined) data.description = description?.trim() || null;
+    if (openingBalance !== undefined) {
+      const opening = parseAmount(openingBalance);
+      if (Number.isFinite(opening)) data.openingBalance = opening;
+    }
+    if (archived !== undefined) data.archived = Boolean(archived);
+
+    const account = await prisma.account.update({ where: { id: req.params.id }, data });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'UPDATE_ACCOUNT', details: JSON.stringify({ accountId: account.id, name: account.name }) },
+    });
+
+    res.json(account);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update account' });
+  }
+});
+
+// ── DELETE /api/accounts/:id ────────────────────────────────
+// Refuse to delete an account that has transaction history — archive instead,
+// so financial records are never silently lost.
+app.delete('/api/accounts/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const count = await prisma.transaction.count({
+      where: { OR: [{ accountId: req.params.id }, { toAccountId: req.params.id }] },
+    });
+    if (count > 0) {
+      return res.status(409).json({
+        error: `This account has ${count} transaction${count !== 1 ? 's' : ''}. Archive it instead of deleting to keep your records.`,
+      });
+    }
+
+    const account = await prisma.account.findUnique({ where: { id: req.params.id } });
+    await prisma.account.delete({ where: { id: req.params.id } });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'DELETE_ACCOUNT', details: JSON.stringify({ accountId: req.params.id, name: account?.name }) },
+    });
+
+    res.json({ message: 'Account deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
+// ── GET /api/finance/summary — simple analytics ─────────────
+// Optional query: from, to (ISO dates) to scope the income/expense figures.
+app.get('/api/finance/summary', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const dateFilter = {};
+    if (from) { const d = new Date(from); if (!isNaN(d)) dateFilter.gte = d; }
+    if (to)   { const d = new Date(to);   if (!isNaN(d)) dateFilter.lte = d; }
+    const where = Object.keys(dateFilter).length ? { date: dateFilter } : {};
+
+    const [accounts, allTxns, scopedTxns] = await Promise.all([
+      prisma.account.findMany({ orderBy: { createdAt: 'asc' } }),
+      // Balances must reflect ALL history regardless of the date scope
+      prisma.transaction.findMany({ select: { type: true, amount: true, accountId: true, toAccountId: true } }),
+      prisma.transaction.findMany({ where, select: { type: true, amount: true, category: true, date: true } }),
+    ]);
+
+    const bal = computeBalances(accounts, allTxns);
+
+    const totalIncome  = scopedTxns.filter(t => t.type === 'INCOME').reduce((s, t) => s + t.amount, 0);
+    const totalExpense = scopedTxns.filter(t => t.type === 'EXPENSE').reduce((s, t) => s + t.amount, 0);
+    const totalBalance = accounts.reduce((s, a) => s + (bal[a.id] ?? 0), 0);
+
+    // Income & expense grouped by category
+    const byCategory = (type) => {
+      const map = {};
+      scopedTxns.filter(t => t.type === type).forEach(t => {
+        const key = (t.category || 'Uncategorized').trim() || 'Uncategorized';
+        map[key] = (map[key] || 0) + t.amount;
+      });
+      return Object.entries(map).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount);
+    };
+
+    // Last 6 months income vs expense trend
+    const monthly = {};
+    scopedTxns.forEach(t => {
+      if (t.type === 'TRANSFER') return;
+      const d = new Date(t.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthly[key]) monthly[key] = { month: key, income: 0, expense: 0 };
+      if (t.type === 'INCOME')  monthly[key].income  += t.amount;
+      if (t.type === 'EXPENSE') monthly[key].expense += t.amount;
+    });
+    const trend = Object.values(monthly).sort((a, b) => a.month.localeCompare(b.month)).slice(-6);
+
+    res.json({
+      totalIncome,
+      totalExpense,
+      net: totalIncome - totalExpense,
+      totalBalance,
+      accountCount: accounts.length,
+      transactionCount: scopedTxns.length,
+      incomeByCategory:  byCategory('INCOME'),
+      expenseByCategory: byCategory('EXPENSE'),
+      trend,
+      accounts: accounts.map(a => ({ id: a.id, name: a.name, type: a.type, archived: a.archived, balance: bal[a.id] ?? a.openingBalance })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to build finance summary' });
+  }
+});
+
+// ── GET /api/transactions — list with optional filters ──────
+// Query: type, accountId, category, from, to, limit
+app.get('/api/transactions', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { type, accountId, category, from, to, limit } = req.query;
+    const where = {};
+    if (type && TXN_TYPES.includes(type)) where.type = type;
+    if (category) where.category = { contains: String(category) };
+    if (accountId) where.OR = [{ accountId: String(accountId) }, { toAccountId: String(accountId) }];
+    if (from || to) {
+      where.date = {};
+      if (from) { const d = new Date(from); if (!isNaN(d)) where.date.gte = d; }
+      if (to)   { const d = new Date(to);   if (!isNaN(d)) where.date.lte = d; }
+    }
+    const take = limit !== undefined ? Math.min(Math.max(parseInt(limit, 10) || 0, 0), 500) || undefined : undefined;
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      include: { account: { select: { name: true } }, toAccount: { select: { name: true } } },
+      orderBy: { date: 'desc' },
+      ...(take !== undefined ? { take } : {}),
+    });
+    res.json(transactions);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch transactions' });
+  }
+});
+
+// ── GET /api/transactions/:id ───────────────────────────────
+app.get('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const txn = await prisma.transaction.findUnique({
+      where: { id: req.params.id },
+      include: { account: { select: { name: true } }, toAccount: { select: { name: true } } },
+    });
+    if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+    res.json(txn);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch transaction' });
+  }
+});
+
+// Validate a transaction payload against existing accounts. Returns { error } or { data }.
+const validateTxn = async ({ type, amount, accountId, toAccountId, category, note, date }) => {
+  if (!TXN_TYPES.includes(type)) return { error: 'Invalid transaction type' };
+
+  const amt = parseAmount(amount);
+  if (!Number.isFinite(amt) || amt <= 0) return { error: 'Amount must be a positive number' };
+
+  if (!accountId) return { error: 'An account is required' };
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!account) return { error: 'The selected account does not exist' };
+
+  let toId = null;
+  if (type === 'TRANSFER') {
+    if (!toAccountId) return { error: 'A destination account is required for transfers' };
+    if (toAccountId === accountId) return { error: 'Cannot transfer to the same account' };
+    const toAccount = await prisma.account.findUnique({ where: { id: toAccountId } });
+    if (!toAccount) return { error: 'The destination account does not exist' };
+    toId = toAccountId;
+  }
+
+  return {
+    data: {
+      type,
+      amount:      amt,
+      accountId,
+      toAccountId: toId,
+      category:    type === 'TRANSFER' ? null : (category?.trim() || null),
+      note:        note?.trim() || null,
+      date:        parseTxnDate(date),
+    },
+  };
+};
+
+// ── POST /api/transactions ──────────────────────────────────
+app.post('/api/transactions', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { error, data } = await validateTxn(req.body);
+    if (error) return res.status(400).json({ error });
+
+    const txn = await prisma.transaction.create({
+      data: { ...data, createdBy: req.user.username },
+      include: { account: { select: { name: true } }, toAccount: { select: { name: true } } },
+    });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'CREATE_TRANSACTION', details: JSON.stringify({ transactionId: txn.id, type: txn.type, amount: txn.amount }) },
+    });
+
+    res.status(201).json(txn);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create transaction' });
+  }
+});
+
+// ── PUT /api/transactions/:id ───────────────────────────────
+app.put('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { error, data } = await validateTxn(req.body);
+    if (error) return res.status(400).json({ error });
+
+    const txn = await prisma.transaction.update({
+      where: { id: req.params.id },
+      data,
+      include: { account: { select: { name: true } }, toAccount: { select: { name: true } } },
+    });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'UPDATE_TRANSACTION', details: JSON.stringify({ transactionId: txn.id, type: txn.type, amount: txn.amount }) },
+    });
+
+    res.json(txn);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update transaction' });
+  }
+});
+
+// ── DELETE /api/transactions/:id ────────────────────────────
+app.delete('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const txn = await prisma.transaction.findUnique({ where: { id: req.params.id } });
+    await prisma.transaction.delete({ where: { id: req.params.id } });
+
+    await prisma.activity.create({
+      data: { userId: req.user.userId, action: 'DELETE_TRANSACTION', details: JSON.stringify({ transactionId: req.params.id, type: txn?.type, amount: txn?.amount }) },
+    });
+
+    res.json({ message: 'Transaction deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete transaction' });
   }
 });
 

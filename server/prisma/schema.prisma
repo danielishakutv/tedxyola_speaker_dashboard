@@ -78,6 +78,50 @@ model Blog {
   updatedAt   DateTime @updatedAt
 }
 
+// ── Accounts & Finance ──────────────────────────────────────
+// An Account is a place money lives: cash box, bank account, mobile money, etc.
+// Its balance is never stored — it is computed from openingBalance plus every
+// transaction that touches it, so the numbers can never drift out of sync.
+model Account {
+  id             String        @id @default(uuid())
+  name           String
+  type           String        @default("BANK") // CASH | BANK | MOBILE | OTHER
+  description    String?
+  openingBalance Float         @default(0)      // balance before any recorded transaction
+  archived       Boolean       @default(false)  // hide from pickers without deleting history
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  // Transactions whose primary account is this one (income into / expense from / transfer out of)
+  transactions     Transaction[] @relation("AccountTxns")
+  // Transactions transferred INTO this account
+  transfersReceived Transaction[] @relation("TransferToAccount")
+}
+
+// A Transaction is one money movement. Three kinds:
+//   INCOME   — money received into `account`
+//   EXPENSE  — money spent from `account`
+//   TRANSFER — money moved from `account` to `toAccount`
+model Transaction {
+  id          String   @id @default(uuid())
+  type        String   @default("EXPENSE") // INCOME | EXPENSE | TRANSFER
+  amount      Float
+  category    String?  // e.g. Sponsorship, Tickets, Venue, Catering (free-text + presets)
+  note        String?
+  date        DateTime @default(now())
+
+  accountId   String
+  account     Account  @relation("AccountTxns", fields: [accountId], references: [id])
+
+  // Only set when type = TRANSFER — the destination account
+  toAccountId String?
+  toAccount   Account? @relation("TransferToAccount", fields: [toAccountId], references: [id])
+
+  createdBy   String?  // username who recorded it
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Popup {
   id          String    @id @default(uuid())
   title       String

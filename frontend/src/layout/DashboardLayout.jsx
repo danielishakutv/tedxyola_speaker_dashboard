@@ -13,6 +13,10 @@ const PAGE_TITLES = {
   '/popups': 'Popups',
   '/media': 'Media Library',
   '/links': 'Links & QR Codes',
+  '/accounts/new': 'Add Account',
+  '/accounts': 'Accounts & Finance',
+  '/transactions/new': 'Record Transaction',
+  '/transactions': 'Transactions',
   '/api-docs': 'API Documentation',
   '/commit-logs': 'Commit Logs',
   '/settings': 'Settings',
@@ -47,6 +51,10 @@ const DashboardLayout = () => {
   const pathKey = Object.keys(PAGE_TITLES).find(key => location.pathname.startsWith(key));
   const title = location.pathname.includes('/speakers/edit')
     ? 'Edit Speaker'
+    : location.pathname.includes('/accounts/edit')
+    ? 'Edit Account'
+    : location.pathname.includes('/transactions/edit')
+    ? 'Edit Transaction'
     : PAGE_TITLES[pathKey] || 'Dashboard';
 
   const avatarLetter = user?.username?.charAt(0).toUpperCase() || 'U';

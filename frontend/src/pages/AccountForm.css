@@ -1,0 +1,60 @@
+/* ── Shared finance-form styles (also used by the Transaction form) ── */
+.account-form-page, .transaction-form-page { max-width: 760px; }
+
+.form-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.header-left { display: flex; align-items: flex-start; gap: 0.85rem; }
+.back-btn {
+  width: 36px; height: 36px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border-color); border-radius: 8px;
+  background: var(--bg-card); color: var(--text-secondary);
+}
+.back-btn:hover { background: var(--bg-card-hover); color: var(--text-main); border-color: var(--border-light); }
+.form-page-header h2 { font-size: 1.3rem; }
+.form-page-subtitle { color: var(--text-muted); font-size: 0.83rem; margin-top: 0.25rem; }
+.form-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+.form-section { padding: 1.5rem; }
+.section-heading {
+  font-size: 1rem; margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);
+}
+
+.form-group { margin-bottom: 1.25rem; }
+.form-group:last-child { margin-bottom: 0; }
+.form-group label {
+  display: block; font-size: 0.82rem; font-weight: 500;
+  margin-bottom: 0.45rem; color: var(--text-secondary);
+}
+.required { color: var(--ted-red); }
+.optional { color: var(--text-muted); font-weight: 400; font-size: 0.75rem; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+.field-error {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  color: var(--danger); font-size: 0.75rem; margin-top: 0.4rem;
+}
+.field-hint { display: block; color: var(--text-muted); font-size: 0.72rem; margin-top: 0.4rem; }
+.input-error { border-color: var(--danger) !important; }
+
+/* ── Amount input with currency prefix ──────────────────── */
+.input-with-prefix { position: relative; display: flex; align-items: center; }
+.input-prefix {
+  position: absolute; left: 0.75rem;
+  color: var(--text-muted); font-size: 0.9rem; pointer-events: none;
+}
+.input-with-prefix input { padding-left: 1.75rem; }
+
+@media (max-width: 560px) {
+  .form-row { grid-template-columns: 1fr; }
+  .form-actions { width: 100%; }
+  .form-actions .btn { flex: 1; justify-content: center; }
+}

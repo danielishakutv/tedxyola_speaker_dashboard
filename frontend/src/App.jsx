@@ -15,6 +15,10 @@ import ApiDocs from './pages/ApiDocs';
 import CommitLogs from './pages/CommitLogs';
 import Media from './pages/Media';
 import Links from './pages/Links';
+import Accounts from './pages/Accounts';
+import AccountForm from './pages/AccountForm';
+import Transactions from './pages/Transactions';
+import TransactionForm from './pages/TransactionForm';
 import './App.css';
 
 const PrivateRoute = ({ children }) => {
@@ -64,6 +68,12 @@ function App() {
           <Route path="popups/edit/:id" element={<PopupForm />} />
           <Route path="media" element={<Media />} />
           <Route path="links" element={<Links />} />
+          <Route path="accounts" element={<AdminRoute><Accounts /></AdminRoute>} />
+          <Route path="accounts/new" element={<AdminRoute><AccountForm /></AdminRoute>} />
+          <Route path="accounts/edit/:id" element={<AdminRoute><AccountForm /></AdminRoute>} />
+          <Route path="transactions" element={<AdminRoute><Transactions /></AdminRoute>} />
+          <Route path="transactions/new" element={<AdminRoute><TransactionForm /></AdminRoute>} />
+          <Route path="transactions/edit/:id" element={<AdminRoute><TransactionForm /></AdminRoute>} />
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
           <Route path="commit-logs" element={<AdminRoute><CommitLogs /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />

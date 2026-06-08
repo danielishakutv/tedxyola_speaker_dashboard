@@ -1,0 +1,168 @@
+/* ── Page shell (shared look with other list pages) ─────── */
+.fin-page { max-width: 1200px; }
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.page-header h2 { font-size: 1.4rem; }
+.page-subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; }
+.error-hint { display: block; color: var(--warning); font-size: 0.75rem; margin-top: 0.35rem; }
+.header-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+/* ── Summary stat cards ─────────────────────────────────── */
+.fin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+.fin-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.1rem 1.2rem;
+}
+.fin-stat-icon {
+  width: 42px; height: 42px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.fin-stat-info { display: flex; flex-direction: column; min-width: 0; }
+.fin-stat-value { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+.fin-stat-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+/* ── Body layout ────────────────────────────────────────── */
+.fin-body {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.5rem;
+  align-items: start;
+}
+.fin-left { min-width: 0; }
+
+.fin-section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+.fin-section-header h3 { font-size: 1.05rem; }
+.fin-view-all {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.8rem; color: var(--text-muted);
+}
+.fin-view-all:hover { color: var(--ted-red); }
+
+/* ── Accounts grid ──────────────────────────────────────── */
+.fin-accounts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+.fin-acc-card { padding: 1.1rem 1.2rem; transition: border-color 0.15s ease; }
+.fin-acc-card:hover { border-color: var(--border-light); }
+.fin-acc-card.archived { opacity: 0.6; }
+.fin-acc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; }
+.fin-acc-type-ic {
+  width: 36px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.04); color: var(--text-secondary);
+}
+.fin-acc-actions { display: flex; gap: 0.25rem; }
+.fin-acc-name { font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem; }
+.fin-acc-archived-tag {
+  font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em;
+  background: var(--border-color); color: var(--text-muted);
+  padding: 1px 6px; border-radius: 4px; font-weight: 600;
+}
+.fin-acc-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+.fin-acc-balance { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 0.75rem; }
+.fin-acc-balance.negative { color: var(--danger); }
+
+/* ── Icon buttons ───────────────────────────────────────── */
+.icon-btn {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; border: 1px solid var(--border-color);
+  background: var(--bg-input); color: var(--text-secondary);
+  cursor: pointer; padding: 0; transition: all 0.15s ease;
+}
+.icon-btn:hover { background: var(--bg-card-hover); border-color: var(--border-light); color: var(--text-main); }
+.icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ── Transactions table ─────────────────────────────────── */
+.fin-table-wrap { overflow: hidden; }
+.fin-table { width: 100%; border-collapse: collapse; }
+.fin-table td { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+.fin-table tr:last-child td { border-bottom: none; }
+.fin-td-ic { width: 40px; }
+.txn-ic {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.txn-ic.income   { background: rgba(34,197,94,0.12);  color: var(--success); }
+.txn-ic.expense  { background: rgba(239,68,68,0.12);  color: var(--danger); }
+.txn-ic.transfer { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+.fin-txn-main { display: flex; flex-direction: column; }
+.fin-txn-title { font-size: 0.88rem; font-weight: 500; color: var(--text-main); }
+.fin-txn-sub { font-size: 0.74rem; color: var(--text-muted); margin-top: 2px; }
+.fin-td-amount { text-align: right; font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+.fin-td-amount.income   { color: var(--success); }
+.fin-td-amount.expense  { color: var(--danger); }
+.fin-td-amount.transfer { color: var(--text-secondary); }
+
+/* ── Category breakdowns ────────────────────────────────── */
+.fin-right { display: flex; flex-direction: column; gap: 1.25rem; }
+.fin-breakdown { padding: 1.2rem; }
+.fin-breakdown h4 {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-size: 0.9rem; margin-bottom: 1rem;
+}
+.fin-breakdown-empty { font-size: 0.8rem; color: var(--text-muted); }
+.fin-bars { display: flex; flex-direction: column; gap: 0.85rem; }
+.fin-bar-label { display: flex; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.35rem; }
+.fin-bar-label span { color: var(--text-secondary); }
+.fin-bar-label strong { color: var(--text-main); font-weight: 600; }
+.fin-bar-track { height: 7px; background: var(--bg-input); border-radius: 4px; overflow: hidden; }
+.fin-bar-fill { height: 100%; border-radius: 4px; }
+.fin-bar-fill.income  { background: var(--success); }
+.fin-bar-fill.expense { background: var(--danger); }
+
+/* ── Empty states ───────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+}
+.empty-state-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,0.04); color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.empty-state h3 { font-size: 1rem; }
+.empty-state p { color: var(--text-muted); font-size: 0.85rem; max-width: 360px; }
+
+/* ── Skeleton ───────────────────────────────────────────── */
+.fin-skeleton {
+  background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+  background-size: 200% 100%;
+  animation: fin-shimmer 1.4s ease infinite;
+}
+@keyframes fin-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.fin-table-sk-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border-color); }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 980px) {
+  .fin-body { grid-template-columns: 1fr; }
+  .fin-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .fin-stats-grid { grid-template-columns: 1fr; }
+  .header-actions { width: 100%; }
+  .header-actions .btn { flex: 1; justify-content: center; }
+}

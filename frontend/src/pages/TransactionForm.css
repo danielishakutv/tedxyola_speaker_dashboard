@@ -1,0 +1,46 @@
+/* ── Transaction type toggle ────────────────────────────── */
+.txn-type-toggle {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+.txn-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: 9px;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+.txn-type-btn:hover { border-color: var(--border-light); background: var(--bg-card-hover); }
+.txn-type-label { font-size: 0.9rem; font-weight: 600; color: var(--text-main); }
+.txn-type-hint { font-size: 0.7rem; color: var(--text-muted); }
+
+.txn-type-btn.active.income {
+  border-color: var(--success);
+  background: rgba(34,197,94,0.08);
+  color: var(--success);
+}
+.txn-type-btn.active.expense {
+  border-color: var(--danger);
+  background: rgba(239,68,68,0.08);
+  color: var(--danger);
+}
+.txn-type-btn.active.transfer {
+  border-color: var(--border-light);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-main);
+}
+
+@media (max-width: 560px) {
+  .txn-type-toggle { grid-template-columns: 1fr; }
+  .txn-type-btn { flex-direction: row; align-items: center; gap: 0.6rem; }
+  .txn-type-hint { display: none; }
+}
