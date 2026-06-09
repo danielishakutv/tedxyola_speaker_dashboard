@@ -28,6 +28,7 @@ const ACTION_CONFIG = {
   CREATE_USER:     { label: 'Created user',     color: 'green',  icon: UserPlus  },
   APPROVE_USER:    { label: 'Approved user',    color: 'green',  icon: UserCheck },
   REJECT_USER:     { label: 'Blocked user',     color: 'red',    icon: UserX     },
+  DELETE_USER:     { label: 'Deleted user',     color: 'red',    icon: Trash2    },
   UPDATE_USER_ROLE:{ label: 'Changed role',     color: 'yellow', icon: Shield    },
   UPDATE_USER:     { label: 'Updated user',     color: 'yellow', icon: Edit2     },
   RESET_PASSWORD:  { label: 'Reset password',   color: 'yellow', icon: KeyRound  },

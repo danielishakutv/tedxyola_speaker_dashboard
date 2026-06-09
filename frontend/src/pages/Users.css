@@ -201,6 +201,9 @@
 .um-act.reject { color: var(--danger); border-color: rgba(239, 68, 68, 0.3); }
 .um-act.reject:hover { background-color: rgba(239, 68, 68, 0.1); }
 .um-act.subtle { color: var(--text-secondary); }
+/* Delete = permanent. Neutral until hovered, then solid red to signal danger. */
+.um-act.delete { color: var(--text-muted); border-color: var(--border-color); }
+.um-act.delete:hover:not(:disabled) { color: #fff; background-color: var(--danger); border-color: var(--danger); }
 
 .um-role-select {
   width: auto;

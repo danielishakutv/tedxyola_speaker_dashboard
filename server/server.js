@@ -572,6 +572,42 @@ app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req,
   }
 });
 
+// DELETE /api/users/:id — permanently remove an account (admin only).
+// Guarded: cannot delete yourself or the last admin. Their forum MESSAGES are
+// kept (authorship is a denormalised username, not an FK), so old posts still
+// show who wrote them. Their audit-log entries and forum memberships are removed
+// (the audit FK would otherwise block the delete).
+app.delete('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!target) return res.status(404).json({ error: 'User not found' });
+
+    if (target.id === req.user.userId) {
+      return res.status(400).json({ error: 'You cannot delete your own account' });
+    }
+    if (target.role === 'admin') {
+      const adminCount = await prisma.user.count({ where: { role: 'admin', status: 'APPROVED' } });
+      if (adminCount <= 1) {
+        return res.status(400).json({ error: 'At least one admin must remain' });
+      }
+    }
+
+    // Remove user-specific rows that depend on the account. Forum messages are
+    // intentionally NOT touched — they keep the user's username.
+    await prisma.activity.deleteMany({ where: { userId: target.id } });
+    await prisma.forumMember.deleteMany({ where: { userId: target.id } });
+    await prisma.user.delete({ where: { id: target.id } });
+
+    // Attribute the deletion to the acting admin (their own audit trail).
+    await logActivity({ data: { userId: req.user.userId, action: 'DELETE_USER', details: JSON.stringify({ username: target.username, role: target.role }) } });
+    broadcastAll({ type: 'ROOMS_UPDATED' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 // ── Member permissions (admin) ────────────────────────────
 // GET current global member capability toggles.
 app.get('/api/settings/member-permissions', requireAuth, requireAdmin, async (req, res) => {

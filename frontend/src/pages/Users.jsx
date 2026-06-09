@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Users as UsersIcon, UserPlus, Check, X, KeyRound, Shield, Hash,
+  Users as UsersIcon, UserPlus, Check, X, KeyRound, Shield, Hash, Trash2,
   Clock, Search, Copy, CheckCircle, AlertTriangle, RefreshCw, Ban, RotateCcw,
 } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
@@ -84,6 +84,27 @@ const Users = () => {
   };
   const setRole = (u, role) => patchUser(u.id, { role }, `${u.username} is now ${role}`);
   const setTeam = (u, tid)  => patchUser(u.id, { teamId: tid || null }, 'Team updated');
+
+  const deleteUser = async (u) => {
+    if (!window.confirm(
+      `Permanently delete "${u.username}"?\n\n` +
+      `• Their account and audit-log history are removed.\n` +
+      `• Forum messages they posted are KEPT (still show their username).\n\n` +
+      `This cannot be undone. To just revoke access, use Block instead.`
+    )) return;
+    setBusyId(u.id);
+    try {
+      const res = await authFetch(`/api/users/${u.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { showToast(data.error || 'Delete failed', 'error'); return; }
+      setUsers(prev => prev.filter(x => x.id !== u.id));
+      showToast(`${u.username} deleted`);
+    } catch {
+      showToast('Delete failed', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const resetPassword = async (u) => {
     if (!window.confirm(`Reset ${u.username}'s password? They will be required to set a new one on next login.`)) return;
@@ -261,6 +282,12 @@ const Users = () => {
                   {u.status === 'REJECTED' && (
                     <button className="um-act approve" disabled={busy} onClick={() => approve(u)}>
                       <RotateCcw size={14} /> Reactivate
+                    </button>
+                  )}
+
+                  {!isSelf && (
+                    <button className="um-act delete" disabled={busy} onClick={() => deleteUser(u)} title="Delete permanently">
+                      <Trash2 size={14} /> Delete
                     </button>
                   )}
                 </div>
