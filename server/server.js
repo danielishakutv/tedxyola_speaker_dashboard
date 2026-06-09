@@ -93,6 +93,96 @@ const requireAdmin = (req, res, next) => {
   next();
 };
 
+// ── Roles & member permissions ────────────────────────────
+// Three roles: admin (everything), editor (content staff), member (volunteer).
+// "Staff" = admin or editor — they can create/edit/delete content. Members are
+// limited to whatever the admin enables in the global member-permission toggles.
+const STAFF_ROLES = ['admin', 'editor'];
+const isStaff = (role) => STAFF_ROLES.includes(role);
+
+// Member capability keys + their defaults (all on). Stored as JSON under the
+// "member_permissions" Setting key. Cached in memory; cache busted on update.
+const MEMBER_CAPABILITIES = ['viewContent', 'manageLinks', 'forum', 'uploadMedia'];
+const DEFAULT_MEMBER_PERMISSIONS = { viewContent: true, manageLinks: true, forum: true, uploadMedia: true };
+
+let _memberPermsCache = null;
+const getMemberPermissions = async () => {
+  if (_memberPermsCache) return _memberPermsCache;
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: 'member_permissions' } });
+    const stored = row ? JSON.parse(row.value) : {};
+    // Merge over defaults so a newly-added capability is on until explicitly disabled.
+    _memberPermsCache = { ...DEFAULT_MEMBER_PERMISSIONS, ...stored };
+  } catch {
+    _memberPermsCache = { ...DEFAULT_MEMBER_PERMISSIONS };
+  }
+  return _memberPermsCache;
+};
+const setMemberPermissions = async (perms) => {
+  const clean = {};
+  for (const cap of MEMBER_CAPABILITIES) clean[cap] = perms[cap] === true;
+  await prisma.setting.upsert({
+    where: { key: 'member_permissions' },
+    update: { value: JSON.stringify(clean) },
+    create: { key: 'member_permissions', value: JSON.stringify(clean) },
+  });
+  _memberPermsCache = clean; // refresh cache so enforcement is immediate
+  return clean;
+};
+
+// Effective capabilities for a given role — staff get everything; members get
+// the configured toggles. Used by /api/auth/me to drive the UI.
+const effectivePermissions = async (role) => {
+  if (isStaff(role)) {
+    const all = {}; for (const c of MEMBER_CAPABILITIES) all[c] = true;
+    return { ...all, manageContent: true, isStaff: true };
+  }
+  const perms = await getMemberPermissions();
+  return { ...perms, manageContent: false, isStaff: false };
+};
+
+// Guard: content writes (create/edit/delete) — staff only, never members.
+const requireStaff = (req, res, next) => {
+  if (!isStaff(req.user?.role)) {
+    return res.status(403).json({ error: 'Forbidden — staff access required' });
+  }
+  next();
+};
+
+// Guard factory: an action gated by a member capability. Staff always pass;
+// members pass only if the admin has enabled that capability.
+const requireMemberCapability = (capability) => async (req, res, next) => {
+  if (isStaff(req.user?.role)) return next();
+  if (req.user?.role === 'member') {
+    const perms = await getMemberPermissions();
+    if (perms[capability]) return next();
+  }
+  return res.status(403).json({ error: 'You do not have permission to do this' });
+};
+
+// ── Team helpers ──────────────────────────────────────────
+// Add a user to their team's forum room (idempotent — ignores duplicates).
+const addUserToTeamRoom = async (userId, teamId) => {
+  if (!userId || !teamId) return;
+  const room = await prisma.forumRoom.findUnique({ where: { teamId } });
+  if (!room) return;
+  try {
+    await prisma.forumMember.create({ data: { roomId: room.id, userId } });
+  } catch (e) {
+    if (e.code !== 'P2002') throw e; // already a member — fine
+  }
+};
+
+// Move a user's team-room membership when their team changes (drops the old
+// team's room, joins the new one).
+const syncTeamRoomMembership = async (userId, oldTeamId, newTeamId) => {
+  if (oldTeamId && oldTeamId !== newTeamId) {
+    const oldRoom = await prisma.forumRoom.findUnique({ where: { teamId: oldTeamId } });
+    if (oldRoom) await prisma.forumMember.deleteMany({ where: { roomId: oldRoom.id, userId } });
+  }
+  if (newTeamId) await addUserToTeamRoom(userId, newTeamId);
+};
+
 // ══════════════════════════════════════════════════════════
 // AUTH ROUTES
 // ══════════════════════════════════════════════════════════
@@ -164,13 +254,20 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// GET /api/auth/me  — verify token and return user info
-app.get('/api/auth/me', requireAuth, (req, res) => {
+// GET /api/auth/me  — verify token and return user info + effective permissions
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  let team = null;
+  try {
+    const u = await prisma.user.findUnique({ where: { id: req.user.userId }, include: { team: true } });
+    if (u?.team) team = { id: u.team.id, name: u.team.name };
+  } catch { /* ignore */ }
   res.json({
     username: req.user.username,
     role: req.user.role,
     userId: req.user.userId,
     mustChangePassword: req.user.mustChangePassword ?? false,
+    permissions: await effectivePermissions(req.user.role),
+    team,
   });
 });
 
@@ -197,15 +294,23 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(409).json({ error: 'That username is already taken' });
     }
 
+    // Optional team selection — only honour a real team id.
+    let validTeamId = null;
+    if (req.body.teamId) {
+      const team = await prisma.team.findUnique({ where: { id: req.body.teamId } });
+      if (team) validTeamId = team.id;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         username,
         name: name || null,
         passwordHash,
-        role: 'editor',       // self-registered users are editors; admin can promote
+        role: 'member',       // self-registered users are general members; admin can promote
         status: 'PENDING',    // must be approved before they can sign in
         mustChangePassword: false,
+        teamId: validTeamId,
       },
     });
 
@@ -281,6 +386,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
 const USER_PUBLIC_FIELDS = {
   id: true, username: true, name: true, role: true,
   status: true, mustChangePassword: true, createdAt: true, updatedAt: true,
+  teamId: true, team: { select: { id: true, name: true } },
 };
 
 // Readable one-time password handed to a user after an admin reset.
@@ -307,7 +413,7 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
     const username = (req.body.username || '').trim();
     const name     = (req.body.name || '').trim();
     const password = req.body.password || '';
-    const role     = req.body.role === 'admin' ? 'admin' : 'editor';
+    const role     = ['admin', 'editor', 'member'].includes(req.body.role) ? req.body.role : 'member';
     const requireChange = req.body.requirePasswordChange === true;
 
     if (!username || !password) {
@@ -365,7 +471,7 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     }
 
     if (role !== undefined) {
-      if (!['admin', 'editor'].includes(role)) {
+      if (!['admin', 'editor', 'member'].includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
       }
       if (isSelf && role !== 'admin') {
@@ -383,6 +489,17 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
 
     if (name !== undefined) data.name = (name || '').trim() || null;
 
+    // Team assignment (null/'' = unassign; otherwise must be a real team).
+    if (req.body.teamId !== undefined) {
+      if (req.body.teamId === null || req.body.teamId === '') {
+        data.teamId = null;
+      } else {
+        const team = await prisma.team.findUnique({ where: { id: req.body.teamId } });
+        if (!team) return res.status(400).json({ error: 'Invalid team' });
+        data.teamId = team.id;
+      }
+    }
+
     if (Object.keys(data).length === 0) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
@@ -390,6 +507,25 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
     const updated = await prisma.user.update({
       where: { id: target.id }, data, select: USER_PUBLIC_FIELDS,
     });
+
+    // Keep the user's team forum-room membership in sync with their state.
+    const finalStatus = data.status !== undefined ? data.status : target.status;
+    const finalTeamId = data.teamId !== undefined ? data.teamId : target.teamId;
+    let roomsChanged = false;
+    if (data.teamId !== undefined && data.teamId !== target.teamId) {
+      // Team changed — drop the old team's room; join the new one if approved.
+      if (target.teamId) {
+        const oldRoom = await prisma.forumRoom.findUnique({ where: { teamId: target.teamId } });
+        if (oldRoom) await prisma.forumMember.deleteMany({ where: { roomId: oldRoom.id, userId: target.id } });
+      }
+      if (finalStatus === 'APPROVED' && finalTeamId) await addUserToTeamRoom(target.id, finalTeamId);
+      roomsChanged = true;
+    } else if (data.status === 'APPROVED' && finalTeamId) {
+      // Just approved (team unchanged) — make sure they're in their team room.
+      await addUserToTeamRoom(target.id, finalTeamId);
+      roomsChanged = true;
+    }
+    if (roomsChanged) broadcastAll({ type: 'ROOMS_UPDATED' });
 
     const action = data.status === 'APPROVED' ? 'APPROVE_USER'
                  : data.status === 'REJECTED' ? 'REJECT_USER'
@@ -433,6 +569,161 @@ app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req,
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// ── Member permissions (admin) ────────────────────────────
+// GET current global member capability toggles.
+app.get('/api/settings/member-permissions', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json(await getMemberPermissions());
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load member permissions' });
+  }
+});
+
+// PUT update the global member capability toggles (takes effect immediately).
+app.put('/api/settings/member-permissions', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const saved = await setMemberPermissions(req.body || {});
+    await logActivity({ data: { userId: req.user.userId, action: 'UPDATE_MEMBER_PERMISSIONS', details: JSON.stringify(saved) } });
+    res.json(saved);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update member permissions' });
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+// TEAMS
+// ══════════════════════════════════════════════════════════
+
+// GET /api/public/teams — public list (id + name) for the registration picker.
+app.get('/api/public/teams', async (req, res) => {
+  try {
+    const teams = await prisma.team.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } });
+    res.json(teams);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch teams' });
+  }
+});
+
+// GET /api/teams — admin list with member counts and room id.
+app.get('/api/teams', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const teams = await prisma.team.findMany({
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { members: true } }, room: { select: { id: true } } },
+    });
+    res.json(teams.map(t => ({
+      id: t.id, name: t.name, description: t.description,
+      memberCount: t._count.members, roomId: t.room?.id || null, createdAt: t.createdAt,
+    })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch teams' });
+  }
+});
+
+// GET /api/teams/:id/members — admin list of a team's members.
+app.get('/api/teams/:id/members', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const members = await prisma.user.findMany({
+      where: { teamId: req.params.id },
+      orderBy: { username: 'asc' },
+      select: { id: true, username: true, name: true, role: true, status: true },
+    });
+    res.json(members);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch team members' });
+  }
+});
+
+// POST /api/teams — create a team and its dedicated forum room.
+app.post('/api/teams', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    const description = (req.body.description || '').trim() || null;
+    if (!name) return res.status(400).json({ error: 'Team name is required' });
+
+    const existing = await prisma.team.findUnique({ where: { name } });
+    if (existing) return res.status(409).json({ error: 'A team with that name already exists' });
+
+    const team = await prisma.team.create({ data: { name, description } });
+
+    // Auto-create the team's forum room.
+    await prisma.forumRoom.create({
+      data: {
+        name,
+        description: description || `${name} team room`,
+        isGeneral: false,
+        createdBy: req.user.username,
+        teamId: team.id,
+      },
+    });
+
+    await logActivity({ data: { userId: req.user.userId, action: 'CREATE_TEAM', details: JSON.stringify({ teamId: team.id, name }) } });
+    broadcastAll({ type: 'ROOMS_UPDATED' });
+    res.status(201).json({ id: team.id, name: team.name, description: team.description, memberCount: 0, roomId: null, createdAt: team.createdAt });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create team' });
+  }
+});
+
+// PUT /api/teams/:id — rename / re-describe (keeps the room name in sync).
+app.put('/api/teams/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const data = {};
+    if (req.body.name !== undefined) {
+      const name = (req.body.name || '').trim();
+      if (!name) return res.status(400).json({ error: 'Team name cannot be empty' });
+      const clash = await prisma.team.findFirst({ where: { name, NOT: { id: req.params.id } } });
+      if (clash) return res.status(409).json({ error: 'A team with that name already exists' });
+      data.name = name;
+    }
+    if (req.body.description !== undefined) data.description = (req.body.description || '').trim() || null;
+    if (Object.keys(data).length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+    const team = await prisma.team.update({ where: { id: req.params.id }, data });
+    if (data.name) {
+      await prisma.forumRoom.updateMany({ where: { teamId: team.id }, data: { name: data.name } });
+      broadcastAll({ type: 'ROOMS_UPDATED' });
+    }
+    await logActivity({ data: { userId: req.user.userId, action: 'UPDATE_TEAM', details: JSON.stringify({ teamId: team.id, ...data }) } });
+    res.json(team);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update team' });
+  }
+});
+
+// DELETE /api/teams/:id — detaches members + orphans the room (SetNull). An
+// empty team room is removed; a room with history is kept to preserve messages.
+app.delete('/api/teams/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const team = await prisma.team.findUnique({ where: { id: req.params.id } });
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+
+    const room = await prisma.forumRoom.findUnique({
+      where: { teamId: team.id },
+      include: { _count: { select: { messages: true } } },
+    });
+
+    // SetNull detaches User.teamId and ForumRoom.teamId automatically.
+    await prisma.team.delete({ where: { id: team.id } });
+    if (room && room._count.messages === 0) {
+      await prisma.forumRoom.delete({ where: { id: room.id } });
+    }
+
+    await logActivity({ data: { userId: req.user.userId, action: 'DELETE_TEAM', details: JSON.stringify({ teamId: team.id, name: team.name }) } });
+    broadcastAll({ type: 'ROOMS_UPDATED' });
+    res.json({ ok: true, roomKept: !!(room && room._count.messages > 0) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete team' });
   }
 });
 
@@ -715,7 +1006,7 @@ app.get('/api/speakers/:id', requireAuth, async (req, res) => {
 });
 
 // POST new speaker
-app.post('/api/speakers', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/speakers', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status, imageUrl: imageUrlInput } = req.body;
     let imageUrl = imageUrlInput?.trim() || null;
@@ -751,7 +1042,7 @@ app.post('/api/speakers', requireAuth, upload.single('image'), async (req, res) 
 });
 
 // PUT update speaker
-app.put('/api/speakers/:id', requireAuth, upload.single('image'), async (req, res) => {
+app.put('/api/speakers/:id', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status, imageUrl: imageUrlInput } = req.body;
     const data = { name, email, phone, jobTitle, company, talkTitle, description, bio, socialLinks, status };
@@ -786,7 +1077,7 @@ app.put('/api/speakers/:id', requireAuth, upload.single('image'), async (req, re
 });
 
 // DELETE speaker
-app.delete('/api/speakers/:id', requireAuth, async (req, res) => {
+app.delete('/api/speakers/:id', requireAuth, requireStaff, async (req, res) => {
   try {
     const speaker = await prisma.speaker.findUnique({ where: { id: req.params.id } });
     await prisma.speaker.delete({ where: { id: req.params.id } });
@@ -812,7 +1103,7 @@ app.delete('/api/speakers/:id', requireAuth, async (req, res) => {
 // ══════════════════════════════════════════════════════════
 
 // GET all media
-app.get('/api/media', requireAuth, async (req, res) => {
+app.get('/api/media', requireAuth, requireMemberCapability('uploadMedia'), async (req, res) => {
   try {
     const media = await prisma.media.findMany({ orderBy: { createdAt: 'desc' } });
     res.json(media);
@@ -823,7 +1114,7 @@ app.get('/api/media', requireAuth, async (req, res) => {
 });
 
 // POST upload a new media file
-app.post('/api/media', requireAuth, mediaUpload.single('file'), async (req, res) => {
+app.post('/api/media', requireAuth, requireMemberCapability('uploadMedia'), mediaUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -858,7 +1149,7 @@ app.post('/api/media', requireAuth, mediaUpload.single('file'), async (req, res)
 });
 
 // DELETE a media file
-app.delete('/api/media/:id', requireAuth, async (req, res) => {
+app.delete('/api/media/:id', requireAuth, requireMemberCapability('uploadMedia'), async (req, res) => {
   try {
     const media = await prisma.media.findUnique({ where: { id: req.params.id } });
     if (!media) return res.status(404).json({ error: 'Media not found' });
@@ -912,7 +1203,7 @@ app.get('/api/sponsors/:id', requireAuth, async (req, res) => {
 });
 
 // POST new sponsor
-app.post('/api/sponsors', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/sponsors', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { name, description, website, status, imageUrl: imageUrlInput } = req.body;
     let imageUrl = imageUrlInput?.trim() || null;
@@ -946,7 +1237,7 @@ app.post('/api/sponsors', requireAuth, upload.single('image'), async (req, res) 
 });
 
 // PUT update sponsor
-app.put('/api/sponsors/:id', requireAuth, upload.single('image'), async (req, res) => {
+app.put('/api/sponsors/:id', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { name, description, website, status, imageUrl: imageUrlInput } = req.body;
     const data = { name, description, website, status };
@@ -980,7 +1271,7 @@ app.put('/api/sponsors/:id', requireAuth, upload.single('image'), async (req, re
 });
 
 // DELETE sponsor
-app.delete('/api/sponsors/:id', requireAuth, async (req, res) => {
+app.delete('/api/sponsors/:id', requireAuth, requireStaff, async (req, res) => {
   try {
     const sponsor = await prisma.sponsor.findUnique({ where: { id: req.params.id } });
     await prisma.sponsor.delete({ where: { id: req.params.id } });
@@ -1028,7 +1319,7 @@ app.get('/api/blogs/:id', requireAuth, async (req, res) => {
 });
 
 // POST new blog
-app.post('/api/blogs', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/blogs', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { title, content, category, author, publishDate, status, imageUrl: imageUrlInput } = req.body;
     let imageUrl = imageUrlInput?.trim() || null;
@@ -1070,7 +1361,7 @@ app.post('/api/blogs', requireAuth, upload.single('image'), async (req, res) => 
 });
 
 // PUT update blog
-app.put('/api/blogs/:id', requireAuth, upload.single('image'), async (req, res) => {
+app.put('/api/blogs/:id', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { title, content, category, author, publishDate, status, imageUrl: imageUrlInput } = req.body;
     const data = { title, content, category, author, status };
@@ -1108,7 +1399,7 @@ app.put('/api/blogs/:id', requireAuth, upload.single('image'), async (req, res) 
 });
 
 // DELETE blog
-app.delete('/api/blogs/:id', requireAuth, async (req, res) => {
+app.delete('/api/blogs/:id', requireAuth, requireStaff, async (req, res) => {
   try {
     const blog = await prisma.blog.findUnique({ where: { id: req.params.id } });
     await prisma.blog.delete({ where: { id: req.params.id } });
@@ -1208,7 +1499,7 @@ app.post('/api/public/popups/:id/click', async (req, res) => {
 });
 
 // ── ADMIN: list all popups ─────────────────────────────────
-app.get('/api/popups', requireAuth, async (req, res) => {
+app.get('/api/popups', requireAuth, requireStaff, async (req, res) => {
   try {
     const popups = await prisma.popup.findMany({ orderBy: { createdAt: 'desc' } });
     res.json(popups);
@@ -1219,7 +1510,7 @@ app.get('/api/popups', requireAuth, async (req, res) => {
 });
 
 // ── ADMIN: single popup ────────────────────────────────────
-app.get('/api/popups/:id', requireAuth, async (req, res) => {
+app.get('/api/popups/:id', requireAuth, requireStaff, async (req, res) => {
   try {
     const popup = await prisma.popup.findUnique({ where: { id: req.params.id } });
     if (!popup) return res.status(404).json({ error: 'Popup not found' });
@@ -1231,7 +1522,7 @@ app.get('/api/popups/:id', requireAuth, async (req, res) => {
 });
 
 // ── ADMIN: create popup ────────────────────────────────────
-app.post('/api/popups', requireAuth, upload.single('image'), async (req, res) => {
+app.post('/api/popups', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { title, body, buttonLabel, buttonUrl, status, frequency, priority,
             startAt, endAt, imageUrl: imageUrlInput } = req.body;
@@ -1281,7 +1572,7 @@ app.post('/api/popups', requireAuth, upload.single('image'), async (req, res) =>
 });
 
 // ── ADMIN: update popup ────────────────────────────────────
-app.put('/api/popups/:id', requireAuth, upload.single('image'), async (req, res) => {
+app.put('/api/popups/:id', requireAuth, requireStaff, upload.single('image'), async (req, res) => {
   try {
     const { title, body, buttonLabel, buttonUrl, status, frequency, priority,
             startAt, endAt, imageUrl: imageUrlInput } = req.body;
@@ -1326,7 +1617,7 @@ app.put('/api/popups/:id', requireAuth, upload.single('image'), async (req, res)
 });
 
 // ── ADMIN: delete popup ────────────────────────────────────
-app.delete('/api/popups/:id', requireAuth, async (req, res) => {
+app.delete('/api/popups/:id', requireAuth, requireStaff, async (req, res) => {
   try {
     const popup = await prisma.popup.findUnique({ where: { id: req.params.id } });
     await prisma.popup.delete({ where: { id: req.params.id } });
@@ -1360,7 +1651,7 @@ const linksHeaders = () => ({
   'Content-Type': 'application/json',
 });
 // GET /api/links — list all short links
-app.get('/api/links', requireAuth, async (req, res) => {
+app.get('/api/links', requireAuth, requireMemberCapability('manageLinks'), async (req, res) => {
   if (!process.env.API_KEY) return res.status(500).json({ error: 'Link service API key not configured' });
   try {
     const r    = await fetch(LINKS_API, { headers: linksHeaders() });
@@ -1373,7 +1664,7 @@ app.get('/api/links', requireAuth, async (req, res) => {
 });
 
 // POST /api/links — create a short link  { url, slug? }
-app.post('/api/links', requireAuth, async (req, res) => {
+app.post('/api/links', requireAuth, requireMemberCapability('manageLinks'), async (req, res) => {
   if (!process.env.API_KEY) return res.status(500).json({ error: 'Link service API key not configured' });
   const { url, slug } = req.body;
   if (!url) return res.status(400).json({ error: 'A target URL is required' });
@@ -1402,7 +1693,7 @@ app.post('/api/links', requireAuth, async (req, res) => {
 });
 
 // DELETE /api/links/:slug — remove a short link
-app.delete('/api/links/:slug', requireAuth, async (req, res) => {
+app.delete('/api/links/:slug', requireAuth, requireMemberCapability('manageLinks'), async (req, res) => {
   if (!process.env.API_KEY) return res.status(500).json({ error: 'Link service API key not configured' });
   try {
     const r    = await fetch(`${LINKS_API}/${encodeURIComponent(req.params.slug)}`, {
@@ -1918,7 +2209,7 @@ await seedGeneralRoom();
 
 // GET /api/forum/rooms — rooms the current user can see
 // General is always visible. Private rooms only if member.
-app.get('/api/forum/rooms', requireAuth, async (req, res) => {
+app.get('/api/forum/rooms', requireAuth, requireMemberCapability('forum'), async (req, res) => {
   try {
     const rooms = await prisma.forumRoom.findMany({
       orderBy: [{ isGeneral: 'desc' }, { createdAt: 'asc' }],
@@ -2069,7 +2360,7 @@ app.delete('/api/forum/rooms/:id/members/:userId', requireAuth, requireAdmin, as
 });
 
 // GET /api/forum/rooms/:id/members — list members
-app.get('/api/forum/rooms/:id/members', requireAuth, async (req, res) => {
+app.get('/api/forum/rooms/:id/members', requireAuth, requireMemberCapability('forum'), async (req, res) => {
   try {
     const members = await prisma.forumMember.findMany({
       where: { roomId: req.params.id },
@@ -2083,7 +2374,7 @@ app.get('/api/forum/rooms/:id/members', requireAuth, async (req, res) => {
 });
 
 // GET /api/forum/rooms/:id/messages — last N messages (before cursor)
-app.get('/api/forum/rooms/:id/messages', requireAuth, async (req, res) => {
+app.get('/api/forum/rooms/:id/messages', requireAuth, requireMemberCapability('forum'), async (req, res) => {
   try {
     // Access control: general is open to all; private rooms require membership
     const room = await prisma.forumRoom.findUnique({ where: { id: req.params.id } });
@@ -2153,6 +2444,12 @@ const verifyWsToken = (req) => {
 wss.on('connection', async (ws, req) => {
   const user = verifyWsToken(req);
   if (!user) { ws.close(4001, 'Unauthorized'); return; }
+
+  // Members can only use the forum if the admin has enabled that capability.
+  if (user.role === 'member') {
+    const perms = await getMemberPermissions();
+    if (!perms.forum) { ws.close(4003, 'Forum access disabled'); return; }
+  }
 
   ws.userId   = user.userId;
   ws.username = user.username;

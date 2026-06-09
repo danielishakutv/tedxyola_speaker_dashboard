@@ -24,6 +24,21 @@ model User {
   updatedAt     DateTime @updatedAt
   activities    Activity[]
   forumMemberships ForumMember[]
+  // Optional team membership (chosen at registration or assigned by an admin).
+  teamId        String?
+  team          Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+}
+
+// A Team groups volunteers. Each team gets its own forum room (auto-created)
+// and members are auto-joined to it on approval/assignment.
+model Team {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  members     User[]
+  room        ForumRoom?
 }
 
 model Speaker {
@@ -146,6 +161,11 @@ model ForumRoom {
 
   messages    ForumMessage[]
   members     ForumMember[]
+
+  // When set, this is a team's dedicated room (one room per team). If the team
+  // is deleted the room is kept but detached (teamId set null) to preserve history.
+  teamId      String?       @unique
+  team        Team?         @relation(fields: [teamId], references: [id], onDelete: SetNull)
 }
 
 model ForumMember {
@@ -185,4 +205,13 @@ model Popup {
   clicks      Int       @default(0)                  // CTA click counter (public tracking)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+// Generic key/value config store. Currently holds "member_permissions" — the
+// global capability toggles an admin sets for the `member` role.
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   // JSON-encoded value
+  updatedAt DateTime @updatedAt
 }

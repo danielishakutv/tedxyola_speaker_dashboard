@@ -21,6 +21,7 @@ import Transactions from './pages/Transactions';
 import TransactionForm from './pages/TransactionForm';
 import Forum from './pages/Forum';
 import Users from './pages/Users';
+import Teams from './pages/Teams';
 import ChangePassword from './pages/ChangePassword';
 import './App.css';
 
@@ -60,6 +61,15 @@ const AdminRoute = ({ children }) => {
   return role === 'admin' ? children : <Navigate to="/dashboard" replace />;
 };
 
+// Staff = admin or editor. Guards content create/edit pages — members are
+// read-only on content and must never reach the forms.
+const StaffRoute = ({ children }) => {
+  const token = localStorage.getItem('tedx_token');
+  if (!token) return <Navigate to="/login" replace />;
+  const role = getRoleFromToken(token);
+  return role === 'admin' || role === 'editor' ? children : <Navigate to="/dashboard" replace />;
+};
+
 function App() {
   return (
     <Router>
@@ -72,17 +82,17 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Overview />} />
           <Route path="speakers" element={<SpeakersList />} />
-          <Route path="speakers/new" element={<SpeakerForm />} />
-          <Route path="speakers/edit/:id" element={<SpeakerForm />} />
+          <Route path="speakers/new" element={<StaffRoute><SpeakerForm /></StaffRoute>} />
+          <Route path="speakers/edit/:id" element={<StaffRoute><SpeakerForm /></StaffRoute>} />
           <Route path="sponsors" element={<SponsorsList />} />
-          <Route path="sponsors/new" element={<SponsorForm />} />
-          <Route path="sponsors/edit/:id" element={<SponsorForm />} />
+          <Route path="sponsors/new" element={<StaffRoute><SponsorForm /></StaffRoute>} />
+          <Route path="sponsors/edit/:id" element={<StaffRoute><SponsorForm /></StaffRoute>} />
           <Route path="blogs" element={<BlogsList />} />
-          <Route path="blogs/new" element={<BlogForm />} />
-          <Route path="blogs/edit/:id" element={<BlogForm />} />
-          <Route path="popups" element={<PopupsList />} />
-          <Route path="popups/new" element={<PopupForm />} />
-          <Route path="popups/edit/:id" element={<PopupForm />} />
+          <Route path="blogs/new" element={<StaffRoute><BlogForm /></StaffRoute>} />
+          <Route path="blogs/edit/:id" element={<StaffRoute><BlogForm /></StaffRoute>} />
+          <Route path="popups" element={<StaffRoute><PopupsList /></StaffRoute>} />
+          <Route path="popups/new" element={<StaffRoute><PopupForm /></StaffRoute>} />
+          <Route path="popups/edit/:id" element={<StaffRoute><PopupForm /></StaffRoute>} />
           <Route path="media" element={<Media />} />
           <Route path="links" element={<Links />} />
           <Route path="accounts" element={<AdminRoute><Accounts /></AdminRoute>} />
@@ -95,6 +105,7 @@ function App() {
           <Route path="api-docs" element={<AdminRoute><ApiDocs /></AdminRoute>} />
           <Route path="commit-logs" element={<AdminRoute><CommitLogs /></AdminRoute>} />
           <Route path="users" element={<AdminRoute><Users /></AdminRoute>} />
+          <Route path="teams" element={<AdminRoute><Teams /></AdminRoute>} />
           <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />
         </Route>
       </Routes>

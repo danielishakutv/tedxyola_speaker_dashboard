@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Users as UsersIcon, UserPlus, Check, X, KeyRound, Shield, Pencil,
+  Users as UsersIcon, UserPlus, Check, X, KeyRound, Shield, Hash,
   Clock, Search, Copy, CheckCircle, AlertTriangle, RefreshCw, Ban, RotateCcw,
 } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
@@ -19,6 +19,8 @@ const STATUS_META = {
   REJECTED: { label: 'Blocked',  cls: 'rejected' },
 };
 
+const ROLE_BADGE = { admin: '⚡ Admin', editor: '✏️ Editor', member: '👤 Member' };
+
 const FILTERS = [
   { key: 'ALL',      label: 'All' },
   { key: 'PENDING',  label: 'Pending' },
@@ -28,6 +30,7 @@ const FILTERS = [
 
 const Users = () => {
   const [users, setUsers]       = useState([]);
+  const [teams, setTeams]       = useState([]);
   const [me, setMe]             = useState(null);
   const [loading, setLoading]   = useState(true);
   const [toast, setToast]       = useState(null);
@@ -55,6 +58,7 @@ const Users = () => {
   useEffect(() => {
     load();
     authFetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => d && setMe(d)).catch(() => {});
+    authFetch('/api/teams').then(r => r.ok ? r.json() : []).then(setTeams).catch(() => {});
   }, []);
 
   /* ── Actions ─────────────────────────────────────────────── */
@@ -79,6 +83,7 @@ const Users = () => {
     patchUser(u.id, { status: 'REJECTED' }, `${u.username} blocked`);
   };
   const setRole = (u, role) => patchUser(u.id, { role }, `${u.username} is now ${role}`);
+  const setTeam = (u, tid)  => patchUser(u.id, { teamId: tid || null }, 'Team updated');
 
   const resetPassword = async (u) => {
     if (!window.confirm(`Reset ${u.username}'s password? They will be required to set a new one on next login.`)) return;
@@ -196,7 +201,8 @@ const Users = () => {
                     {u.name && <span className="um-realname">{u.name}</span>}
                     <div className="um-badges">
                       <span className={`um-status ${meta.cls}`}>{meta.label}</span>
-                      <span className={`um-role ${u.role}`}>{u.role === 'admin' ? '⚡ Admin' : '✏️ Editor'}</span>
+                      <span className={`um-role ${u.role}`}>{ROLE_BADGE[u.role] || u.role}</span>
+                      {u.team && <span className="um-flag"><Hash size={11} /> {u.team.name}</span>}
                       {u.mustChangePassword && <span className="um-flag"><KeyRound size={11} /> Reset pending</span>}
                     </div>
                   </div>
@@ -223,9 +229,22 @@ const Users = () => {
                         onChange={e => setRole(u, e.target.value)}
                         aria-label="Change role"
                       >
+                        <option value="member">Member</option>
                         <option value="editor">Editor</option>
                         <option value="admin">Admin</option>
                       </select>
+                      {teams.length > 0 && (
+                        <select
+                          className="um-role-select"
+                          value={u.teamId || ''}
+                          disabled={busy}
+                          onChange={e => setTeam(u, e.target.value)}
+                          aria-label="Assign team"
+                        >
+                          <option value="">No team</option>
+                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      )}
                       <button className="um-act subtle" disabled={busy} onClick={() => resetPassword(u)}>
                         <KeyRound size={14} /> Reset
                       </button>
@@ -321,6 +340,7 @@ const AddUserModal = ({ onClose, onCreated, onError }) => {
           <div className="um-field">
             <label>Role</label>
             <select value={role} onChange={e => setRole(e.target.value)}>
+              <option value="member">Member</option>
               <option value="editor">Editor</option>
               <option value="admin">Admin</option>
             </select>

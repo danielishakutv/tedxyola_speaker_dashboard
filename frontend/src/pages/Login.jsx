@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Login.css';
 
@@ -10,10 +10,20 @@ const Login = () => {
   const [name, setName]         = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
+  const [teamId, setTeamId]     = useState('');
+  const [teams, setTeams]       = useState([]);
   const [error, setError]       = useState('');
   const [notice, setNotice]     = useState('');
   const [loading, setLoading]   = useState(false);
   const navigate = useNavigate();
+
+  // Load the public team list so registrants can pick a team.
+  useEffect(() => {
+    fetch(`${API}/api/public/teams`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => Array.isArray(data) && setTeams(data))
+      .catch(() => {});
+  }, []);
 
   const resetMessages = () => { setError(''); setNotice(''); };
 
@@ -69,7 +79,7 @@ const Login = () => {
       const res = await fetch(`${API}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, name, password }),
+        body: JSON.stringify({ username, name, password, teamId: teamId || null }),
       });
       const data = await res.json();
 
@@ -150,6 +160,16 @@ const Login = () => {
                 placeholder="Jane Doe"
                 autoComplete="name"
               />
+            </div>
+          )}
+
+          {isRegister && teams.length > 0 && (
+            <div className="form-group">
+              <label htmlFor="team">Team <span className="optional">(optional)</span></label>
+              <select id="team" value={teamId} onChange={e => setTeamId(e.target.value)}>
+                <option value="">Select a team (or decide later)</option>
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
             </div>
           )}
 

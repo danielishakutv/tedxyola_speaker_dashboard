@@ -220,6 +220,61 @@
   gap: 0.5rem;
 }
 
+/* ── Member permissions panel ─────────────────────────────── */
+.st-perms-section { margin-top: 1.25rem; }
+
+.st-perm-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 1rem;
+}
+
+.st-perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--border-color);
+}
+.st-perm-row:first-child { border-top: none; }
+
+.st-perm-text { display: flex; flex-direction: column; gap: 0.2rem; }
+.st-perm-label { font-size: 0.92rem; font-weight: 600; color: var(--text-main); }
+.st-perm-desc  { font-size: 0.8rem; color: var(--text-muted); }
+
+.st-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background-color: var(--bg-input);
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+.st-switch:hover { border-color: var(--text-muted); background-color: var(--bg-input); }
+.st-switch.on {
+  background-color: var(--success);
+  border-color: var(--success);
+}
+.st-switch:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.st-switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #fff;
+  transition: left 0.18s ease;
+}
+.st-switch.on .st-switch-knob { left: 23px; }
+
 .st-account-btn {
   width: 100%;
   justify-content: center;

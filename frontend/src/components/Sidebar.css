@@ -63,6 +63,18 @@
   gap: 0.25rem;
 }
 
+/* Section label separating sidebar groups */
+.nav-section {
+  padding: 0.85rem 0.85rem 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  opacity: 0.6;
+  user-select: none;
+}
+
 .nav-item {
   display: flex;
   align-items: center;

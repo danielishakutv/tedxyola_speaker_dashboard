@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Search, FileText, Calendar, User } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
 import './BlogsList.css';
@@ -28,6 +28,7 @@ const SkeletonCard = () => (
 
 /* ── Main Component ──────────────────────────────────────── */
 const BlogsList = () => {
+  const { isStaff } = useOutletContext();
   const [searchTerm, setSearchTerm]   = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [blogs, setBlogs]             = useState([]);
@@ -94,10 +95,12 @@ const BlogsList = () => {
           {error && <small className="error-hint">Backend offline — data may be stale</small>}
         </div>
 
-        <Link to="/blogs/new" className="add-blog-btn">
-          <span className="add-blog-icon"><Plus size={15} strokeWidth={2.5} /></span>
-          Add Blog Post
-        </Link>
+        {isStaff && (
+          <Link to="/blogs/new" className="add-blog-btn">
+            <span className="add-blog-icon"><Plus size={15} strokeWidth={2.5} /></span>
+            Add Blog Post
+          </Link>
+        )}
       </div>
 
       {/* ── Controls ───────────────────────────────────── */}
@@ -143,7 +146,7 @@ const BlogsList = () => {
               ? `Nothing matches "${searchTerm}". Try a different search.`
               : 'Start sharing your thoughts by creating the first blog post.'}
           </p>
-          {!searchTerm && (
+          {!searchTerm && isStaff && (
             <Link to="/blogs/new" className="btn primary" style={{ marginTop: '0.5rem' }}>
               <Plus size={14} /> Add Blog Post
             </Link>
@@ -169,14 +172,16 @@ const BlogsList = () => {
                   <span className={`status-pill ${blog.status.toLowerCase()}`}>
                     {blog.status}
                   </span>
-                  <div className="card-actions">
-                    <Link to={`/blogs/edit/${blog.id}`} className="icon-btn" title="Edit">
-                      <Edit2 size={13} />
-                    </Link>
-                    <button className="icon-btn danger" title="Delete" onClick={() => handleDelete(blog.id)}>
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                  {isStaff && (
+                    <div className="card-actions">
+                      <Link to={`/blogs/edit/${blog.id}`} className="icon-btn" title="Edit">
+                        <Edit2 size={13} />
+                      </Link>
+                      <button className="icon-btn danger" title="Delete" onClick={() => handleDelete(blog.id)}>
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -37,6 +37,14 @@ const ACTION_CONFIG = {
 const getActionConfig = (action) =>
   ACTION_CONFIG[action] ?? { label: action, color: 'gray', icon: Activity };
 
+/* ── Member permission toggles ─────────────────────────────── */
+const MEMBER_PERM_CONFIG = [
+  { key: 'viewContent', label: 'View content',      desc: 'See speakers, sponsors, and blogs (read-only).' },
+  { key: 'manageLinks', label: 'Create Links & QR', desc: 'Generate short links and QR codes.' },
+  { key: 'forum',       label: 'Forum access',      desc: 'Participate in the general and team forums.' },
+  { key: 'uploadMedia', label: 'Upload media',      desc: 'Add images to the shared media library.' },
+];
+
 const Settings = () => {
   const navigate = useNavigate();
 
@@ -49,10 +57,33 @@ const Settings = () => {
   const [filterAction,      setFilterAction]       = useState('ALL');
   const [filterDate,        setFilterDate]         = useState('ALL');
   const [expandedId,        setExpandedId]         = useState(null);
+  const [memberPerms,       setMemberPerms]        = useState(null);
+  const [savingPerms,       setSavingPerms]        = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 2800);
+  };
+
+  const togglePerm = async (key) => {
+    if (!memberPerms || savingPerms) return;
+    const prev = memberPerms;
+    const next = { ...memberPerms, [key]: !memberPerms[key] };
+    setMemberPerms(next);          // optimistic
+    setSavingPerms(true);
+    try {
+      const res = await authFetch('/api/settings/member-permissions', {
+        method: 'PUT', body: JSON.stringify(next),
+      });
+      if (!res.ok) { setMemberPerms(prev); showToast('Failed to save permissions', 'error'); return; }
+      setMemberPerms(await res.json());
+      showToast('Member permissions updated');
+    } catch {
+      setMemberPerms(prev);
+      showToast('Failed to save permissions', 'error');
+    } finally {
+      setSavingPerms(false);
+    }
   };
 
   const checkApi = () => {
@@ -79,6 +110,10 @@ const Settings = () => {
     authFetch('/api/auth/me')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setAdminUser(data); })
+      .catch(() => {});
+    authFetch('/api/settings/member-permissions')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setMemberPerms(data); })
       .catch(() => {});
   }, []);
 
@@ -251,6 +286,45 @@ const Settings = () => {
         </section>
 
       </div>
+
+      {/* ══════════════════════════════════════════════════════
+          MEMBER PERMISSIONS — what general members are allowed to do
+          ══════════════════════════════════════════════════════ */}
+      <section className="st-card card st-perms-section">
+        <div className="st-card-header">
+          <div className="st-card-icon"><UserCog size={16} /></div>
+          <div>
+            <h3>Member Permissions</h3>
+            <p>Control what general members (volunteers) can do. Applies to all members; takes effect immediately.</p>
+          </div>
+        </div>
+
+        <div className="st-perm-list">
+          {memberPerms === null ? (
+            <div className="st-logs-loading"><RefreshCw size={16} className="spinning" /> <span>Loading…</span></div>
+          ) : (
+            MEMBER_PERM_CONFIG.map(({ key, label, desc }) => (
+              <div className="st-perm-row" key={key}>
+                <div className="st-perm-text">
+                  <span className="st-perm-label">{label}</span>
+                  <span className="st-perm-desc">{desc}</span>
+                </div>
+                <button
+                  type="button"
+                  className={`st-switch ${memberPerms[key] ? 'on' : ''}`}
+                  onClick={() => togglePerm(key)}
+                  disabled={savingPerms}
+                  role="switch"
+                  aria-checked={!!memberPerms[key]}
+                  aria-label={label}
+                >
+                  <span className="st-switch-knob" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
 
       {/* ══════════════════════════════════════════════════════
           AUDIT LOG — full-width, rich UI

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Menu } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
+import { authFetch } from '../utils/authFetch';
+import { decodeToken } from '../utils/auth';
 import './DashboardLayout.css';
 
 const PAGE_TITLES = {
@@ -21,27 +23,31 @@ const PAGE_TITLES = {
   '/api-docs': 'API Documentation',
   '/commit-logs': 'Commit Logs',
   '/users': 'User Management',
+  '/teams': 'Teams',
   '/settings': 'Settings',
 };
 
-/* Decode the JWT stored in localStorage to get user info */
-const getUserFromToken = () => {
-  try {
-    const token = localStorage.getItem('tedx_token');
-    if (!token) return null;
-    const parts = token.split('.');
-    if (parts.length < 2) return null;
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return { username: payload.username || 'User', role: payload.role || 'editor' };
-  } catch {
-    return null;
-  }
-};
+const ROLE_LABEL = { admin: 'Admin', editor: 'Editor', member: 'Member' };
 
 const DashboardLayout = () => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const user = getUserFromToken();
+  const [permissions, setPermissions] = useState(null);
+
+  const payload = decodeToken();
+  const user = payload ? { username: payload.username || 'User', role: payload.role || 'member' } : null;
+  const role = user?.role || 'member';
+  const isAdmin = role === 'admin';
+  const isStaff = role === 'admin' || role === 'editor';
+
+  // Fetch fresh effective permissions (drives sidebar visibility for members and
+  // read-only flags on content pages). Staff get all-true; members get the toggles.
+  useEffect(() => {
+    authFetch('/api/auth/me')
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => { if (data?.permissions) setPermissions(data.permissions); })
+      .catch(() => {});
+  }, []);
 
   // Lock background scroll while the mobile drawer is open
   useEffect(() => {
@@ -49,7 +55,6 @@ const DashboardLayout = () => {
     return () => document.body.classList.remove('sidebar-open');
   }, [sidebarOpen]);
 
-  // Determine page title from path
   const pathKey = Object.keys(PAGE_TITLES).find(key => location.pathname.startsWith(key));
   const title = location.pathname.includes('/speakers/edit')
     ? 'Edit Speaker'
@@ -62,11 +67,15 @@ const DashboardLayout = () => {
   const isForumPage = location.pathname.startsWith('/forum');
 
   const avatarLetter = user?.username?.charAt(0).toUpperCase() || 'U';
-  const isAdmin = user?.role === 'admin';
 
   return (
     <div className="dashboard-layout">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} isAdmin={isAdmin} />
+      <Sidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        role={role}
+        permissions={permissions}
+      />
 
       {/* Backdrop — only visible/active on mobile when the drawer is open */}
       <div
@@ -92,15 +101,15 @@ const DashboardLayout = () => {
               <div className="avatar">{avatarLetter}</div>
               <div className="user-info">
                 <span className="user-name">{user?.username || 'User'}</span>
-                <span className={`user-role-badge ${isAdmin ? 'admin' : 'editor'}`}>
-                  {isAdmin ? 'Admin' : 'Editor'}
+                <span className={`user-role-badge ${role}`}>
+                  {ROLE_LABEL[role] || 'Member'}
                 </span>
               </div>
             </div>
           </div>
         </header>
         <div className={`content-area${isForumPage ? ' content-area--flush' : ''}`}>
-          <Outlet />
+          <Outlet context={{ role, isAdmin, isStaff, permissions }} />
         </div>
       </main>
     </div>

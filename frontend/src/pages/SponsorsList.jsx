@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Search, Building, ExternalLink, Users } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
 import './SponsorsList.css';
@@ -25,6 +25,7 @@ const SkeletonCard = () => (
 
 /* ── Main Component ──────────────────────────────────────── */
 const SponsorsList = () => {
+  const { isStaff } = useOutletContext();
   const [searchTerm, setSearchTerm]   = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [sponsors, setSponsors]       = useState([]);
@@ -82,10 +83,12 @@ const SponsorsList = () => {
           {error && <small className="error-hint">Backend offline — data may be stale</small>}
         </div>
 
-        <Link to="/sponsors/new" className="add-sponsor-btn">
-          <span className="add-sponsor-icon"><Plus size={15} strokeWidth={2.5} /></span>
-          Add Sponsor
-        </Link>
+        {isStaff && (
+          <Link to="/sponsors/new" className="add-sponsor-btn">
+            <span className="add-sponsor-icon"><Plus size={15} strokeWidth={2.5} /></span>
+            Add Sponsor
+          </Link>
+        )}
       </div>
 
       {/* ── Controls ───────────────────────────────────── */}
@@ -131,7 +134,7 @@ const SponsorsList = () => {
               ? `Nothing matches "${searchTerm}". Try a different search.`
               : 'Start building your sponsors list by adding the first sponsor.'}
           </p>
-          {!searchTerm && (
+          {!searchTerm && isStaff && (
             <Link to="/sponsors/new" className="btn primary" style={{ marginTop: '0.5rem' }}>
               <Plus size={14} /> Add Sponsor
             </Link>
@@ -156,14 +159,16 @@ const SponsorsList = () => {
                   <span className={`status-pill ${sponsor.status.toLowerCase()}`}>
                     {sponsor.status}
                   </span>
-                  <div className="card-actions">
-                    <Link to={`/sponsors/edit/${sponsor.id}`} className="icon-btn" title="Edit">
-                      <Edit2 size={13} />
-                    </Link>
-                    <button className="icon-btn danger" title="Delete" onClick={() => handleDelete(sponsor.id)}>
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
+                  {isStaff && (
+                    <div className="card-actions">
+                      <Link to={`/sponsors/edit/${sponsor.id}`} className="icon-btn" title="Edit">
+                        <Edit2 size={13} />
+                      </Link>
+                      <button className="icon-btn danger" title="Delete" onClick={() => handleDelete(sponsor.id)}>
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Search, Mail, Briefcase, Users, ExternalLink } from 'lucide-react';
 import { authFetch } from '../utils/authFetch';
 import './SpeakersList.css';
@@ -26,6 +26,7 @@ const SkeletonCard = () => (
 
 /* ── Main Component ──────────────────────────────────────── */
 const SpeakersList = () => {
+  const { isStaff } = useOutletContext();
   const [searchTerm, setSearchTerm]   = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
   const [speakers, setSpeakers]       = useState([]);
@@ -88,10 +89,12 @@ const SpeakersList = () => {
           {error && <small className="error-hint">Backend offline — data may be stale</small>}
         </div>
 
-        <Link to="/speakers/new" className="add-speaker-btn">
-          <span className="add-speaker-icon"><Plus size={15} strokeWidth={2.5} /></span>
-          Add Speaker
-        </Link>
+        {isStaff && (
+          <Link to="/speakers/new" className="add-speaker-btn">
+            <span className="add-speaker-icon"><Plus size={15} strokeWidth={2.5} /></span>
+            Add Speaker
+          </Link>
+        )}
       </div>
 
       {/* ── Controls ───────────────────────────────────── */}
@@ -137,7 +140,7 @@ const SpeakersList = () => {
               ? `Nothing matches "${searchTerm}". Try a different search.`
               : 'Start building your lineup by adding the first speaker.'}
           </p>
-          {!searchTerm && (
+          {!searchTerm && isStaff && (
             <Link to="/speakers/new" className="btn primary" style={{ marginTop: '0.5rem' }}>
               <Plus size={14} /> Add Speaker
             </Link>
@@ -170,14 +173,16 @@ const SpeakersList = () => {
                     <span className={`status-pill ${speaker.status.toLowerCase()}`}>
                       {speaker.status}
                     </span>
-                    <div className="card-actions">
-                      <Link to={`/speakers/edit/${speaker.id}`} className="icon-btn" title="Edit">
-                        <Edit2 size={13} />
-                      </Link>
-                      <button className="icon-btn danger" title="Delete" onClick={() => handleDelete(speaker.id)}>
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
+                    {isStaff && (
+                      <div className="card-actions">
+                        <Link to={`/speakers/edit/${speaker.id}`} className="icon-btn" title="Edit">
+                          <Edit2 size={13} />
+                        </Link>
+                        <button className="icon-btn danger" title="Delete" onClick={() => handleDelete(speaker.id)}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
