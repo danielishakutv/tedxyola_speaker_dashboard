@@ -17,6 +17,19 @@ dotenv.config();
 const app    = express();
 const prisma = new PrismaClient();
 
+// Safe activity logger. Audit logging must NEVER break the operation it records:
+// a logging failure (or a stale session token with no userId) used to bubble up
+// and turn a successful update into a 500. This swallows those failures and skips
+// logging when there is no actor. Accepts the same shape as prisma.activity.create.
+const logActivity = async (args) => {
+  try {
+    if (!args?.data?.userId) return; // stale token / no actor — nothing to attribute
+    await prisma.activity.create(args);
+  } catch (e) {
+    console.error('activity log failed (non-fatal):', e.message);
+  }
+};
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ── Uploads directory ─────────────────────────────────────
@@ -119,7 +132,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Log the login activity
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: user.id,
         action: 'LOGIN',
@@ -197,7 +210,7 @@ app.post('/api/auth/register', async (req, res) => {
     });
 
     // Record the registration in the audit log (actor is the new user)
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: user.id,
         action: 'REGISTER',
@@ -244,7 +257,7 @@ app.post('/api/auth/change-password', requireAuth, async (req, res) => {
       data: { passwordHash, mustChangePassword: false },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: user.id, action: 'CHANGE_PASSWORD', details: JSON.stringify({ username: user.username }) },
     });
 
@@ -319,7 +332,7 @@ app.post('/api/users', requireAuth, requireAdmin, async (req, res) => {
       select: USER_PUBLIC_FIELDS,
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'CREATE_USER', details: JSON.stringify({ username, role }) },
     });
 
@@ -382,7 +395,7 @@ app.patch('/api/users/:id', requireAuth, requireAdmin, async (req, res) => {
                  : data.status === 'REJECTED' ? 'REJECT_USER'
                  : data.role !== undefined     ? 'UPDATE_USER_ROLE'
                  : 'UPDATE_USER';
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action, details: JSON.stringify({ username: target.username, ...data }) },
     });
 
@@ -412,7 +425,7 @@ app.post('/api/users/:id/reset-password', requireAuth, requireAdmin, async (req,
       data: { passwordHash, mustChangePassword: true },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'RESET_PASSWORD', details: JSON.stringify({ username: target.username }) },
     });
 
@@ -722,7 +735,7 @@ app.post('/api/speakers', requireAuth, upload.single('image'), async (req, res) 
     });
 
     // Log the activity
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'CREATE_SPEAKER',
@@ -757,7 +770,7 @@ app.put('/api/speakers/:id', requireAuth, upload.single('image'), async (req, re
     const speaker = await prisma.speaker.update({ where: { id: req.params.id }, data });
 
     // Log the activity
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'UPDATE_SPEAKER',
@@ -779,7 +792,7 @@ app.delete('/api/speakers/:id', requireAuth, async (req, res) => {
     await prisma.speaker.delete({ where: { id: req.params.id } });
 
     // Log the activity
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'DELETE_SPEAKER',
@@ -829,7 +842,7 @@ app.post('/api/media', requireAuth, mediaUpload.single('file'), async (req, res)
       },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId:  req.user.userId,
         action:  'UPLOAD_MEDIA',
@@ -856,7 +869,7 @@ app.delete('/api/media/:id', requireAuth, async (req, res) => {
 
     await prisma.media.delete({ where: { id: req.params.id } });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId:  req.user.userId,
         action:  'DELETE_MEDIA',
@@ -917,7 +930,7 @@ app.post('/api/sponsors', requireAuth, upload.single('image'), async (req, res) 
       data: { name, description, website, imageUrl, status: status || 'DRAFT' },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'CREATE_SPONSOR',
@@ -951,7 +964,7 @@ app.put('/api/sponsors/:id', requireAuth, upload.single('image'), async (req, re
 
     const sponsor = await prisma.sponsor.update({ where: { id: req.params.id }, data });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'UPDATE_SPONSOR',
@@ -972,7 +985,7 @@ app.delete('/api/sponsors/:id', requireAuth, async (req, res) => {
     const sponsor = await prisma.sponsor.findUnique({ where: { id: req.params.id } });
     await prisma.sponsor.delete({ where: { id: req.params.id } });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'DELETE_SPONSOR',
@@ -1041,7 +1054,7 @@ app.post('/api/blogs', requireAuth, upload.single('image'), async (req, res) => 
       },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'CREATE_BLOG',
@@ -1079,7 +1092,7 @@ app.put('/api/blogs/:id', requireAuth, upload.single('image'), async (req, res) 
 
     const blog = await prisma.blog.update({ where: { id: req.params.id }, data });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'UPDATE_BLOG',
@@ -1100,7 +1113,7 @@ app.delete('/api/blogs/:id', requireAuth, async (req, res) => {
     const blog = await prisma.blog.findUnique({ where: { id: req.params.id } });
     await prisma.blog.delete({ where: { id: req.params.id } });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'DELETE_BLOG',
@@ -1252,7 +1265,7 @@ app.post('/api/popups', requireAuth, upload.single('image'), async (req, res) =>
       },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'CREATE_POPUP',
@@ -1297,7 +1310,7 @@ app.put('/api/popups/:id', requireAuth, upload.single('image'), async (req, res)
 
     const popup = await prisma.popup.update({ where: { id: req.params.id }, data });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'UPDATE_POPUP',
@@ -1318,7 +1331,7 @@ app.delete('/api/popups/:id', requireAuth, async (req, res) => {
     const popup = await prisma.popup.findUnique({ where: { id: req.params.id } });
     await prisma.popup.delete({ where: { id: req.params.id } });
 
-    await prisma.activity.create({
+    await logActivity({
       data: {
         userId: req.user.userId,
         action: 'DELETE_POPUP',
@@ -1373,7 +1386,7 @@ app.post('/api/links', requireAuth, async (req, res) => {
     const data = await r.json().catch(() => ({}));
 
     if (r.ok) {
-      await prisma.activity.create({
+      await logActivity({
         data: {
           userId:  req.user.userId,
           action:  'CREATE_LINK',
@@ -1399,7 +1412,7 @@ app.delete('/api/links/:slug', requireAuth, async (req, res) => {
     const data = await r.json().catch(() => ({}));
 
     if (r.ok) {
-      await prisma.activity.create({
+      await logActivity({
         data: {
           userId:  req.user.userId,
           action:  'DELETE_LINK',
@@ -1555,7 +1568,7 @@ app.post('/api/accounts', requireAuth, requireAdmin, async (req, res) => {
       },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'CREATE_ACCOUNT', details: JSON.stringify({ accountId: account.id, name: account.name }) },
     });
 
@@ -1585,7 +1598,7 @@ app.put('/api/accounts/:id', requireAuth, requireAdmin, async (req, res) => {
 
     const account = await prisma.account.update({ where: { id: req.params.id }, data });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'UPDATE_ACCOUNT', details: JSON.stringify({ accountId: account.id, name: account.name }) },
     });
 
@@ -1613,7 +1626,7 @@ app.delete('/api/accounts/:id', requireAuth, requireAdmin, async (req, res) => {
     const account = await prisma.account.findUnique({ where: { id: req.params.id } });
     await prisma.account.delete({ where: { id: req.params.id } });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'DELETE_ACCOUNT', details: JSON.stringify({ accountId: req.params.id, name: account?.name }) },
     });
 
@@ -1801,7 +1814,7 @@ app.post('/api/transactions', requireAuth, requireAdmin, async (req, res) => {
       include: { account: { select: { name: true } }, toAccount: { select: { name: true } } },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'CREATE_TRANSACTION', details: JSON.stringify({ transactionId: txn.id, type: txn.type, amount: txn.amount }) },
     });
 
@@ -1824,7 +1837,7 @@ app.put('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) => 
       include: { account: { select: { name: true } }, toAccount: { select: { name: true } } },
     });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'UPDATE_TRANSACTION', details: JSON.stringify({ transactionId: txn.id, type: txn.type, amount: txn.amount }) },
     });
 
@@ -1841,7 +1854,7 @@ app.delete('/api/transactions/:id', requireAuth, requireAdmin, async (req, res) 
     const txn = await prisma.transaction.findUnique({ where: { id: req.params.id } });
     await prisma.transaction.delete({ where: { id: req.params.id } });
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'DELETE_TRANSACTION', details: JSON.stringify({ transactionId: req.params.id, type: txn?.type, amount: txn?.amount }) },
     });
 
@@ -1973,7 +1986,7 @@ app.post('/api/forum/rooms', requireAuth, requireAdmin, async (req, res) => {
       }
     }
 
-    await prisma.activity.create({
+    await logActivity({
       data: { userId: req.user.userId, action: 'CREATE_FORUM_ROOM', details: JSON.stringify({ roomId: room.id, name: room.name }) },
     });
 
