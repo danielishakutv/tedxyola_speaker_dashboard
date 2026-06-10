@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, v4 as randomUUID } from 'uuid';
 import { WebSocketServer } from 'ws';
 import http from 'http';
 
@@ -60,6 +60,25 @@ const mediaUpload = multer({
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
     else cb(new Error('Only image files are allowed'));
+  },
+});
+
+// ── Multer — forum file attachments (images + documents, 20 MB)
+const FORUM_ALLOWED_MIME = new Set([
+  'image/jpeg','image/png','image/gif','image/webp','image/svg+xml',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/plain','text/csv',
+]);
+const forumUpload = multer({
+  storage: mediaStorage,           // same disk destination as media library
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (FORUM_ALLOWED_MIME.has(file.mimetype)) cb(null, true);
+    else cb(new Error('File type not allowed'));
   },
 });
 
@@ -2409,7 +2428,293 @@ app.get('/api/forum/rooms/:id/members', requireAuth, requireMemberCapability('fo
   }
 });
 
-// GET /api/forum/rooms/:id/messages — last N messages (before cursor)
+// ── FORUM TASKS ─────────────────────────────────────────────
+// Task cards have multiple checklist items. Each item has its own text,
+// assignees, and per-user check state.
+// items shape: [{ id, text, assigneeIds: string[], checks: {userId: bool} }]
+
+// Helper: collect all unique userIds across all items
+const allItemAssignees = (items) =>
+  [...new Set(items.flatMap(it => it.assigneeIds || []))];
+
+// Helper: hydrate items with { assignees: [{id,username}] }
+const hydrateItems = async (items) => {
+  const ids = allItemAssignees(items);
+  if (!ids.length) return items;
+  const users = await prisma.user.findMany({
+    where: { id: { in: ids } }, select: { id: true, username: true },
+  });
+  const map = Object.fromEntries(users.map(u => [u.id, u]));
+  return items.map(it => ({
+    ...it,
+    assignees: (it.assigneeIds || []).map(id => map[id]).filter(Boolean),
+  }));
+};
+
+// GET /api/forum/rooms/:id/participants — users who can appear in tasks
+// For General rooms returns all users; for private rooms returns members.
+// Available to all authenticated users in the room.
+app.get('/api/forum/rooms/:id/participants', requireAuth, async (req, res) => {
+  try {
+    const room = await prisma.forumRoom.findUnique({ where: { id: req.params.id } });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    if (room.isGeneral) {
+      const users = await prisma.user.findMany({
+        orderBy: { username: 'asc' },
+        select:  { id: true, username: true, role: true },
+      });
+      return res.json(users);
+    }
+
+    const members = await prisma.forumMember.findMany({
+      where: { roomId: req.params.id },
+      include: { user: { select: { id: true, username: true, role: true } } },
+    });
+    res.json(members.map(m => m.user));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch participants' });
+  }
+});
+
+// POST /api/forum/rooms/:id/tasks — create a task card
+app.post('/api/forum/rooms/:id/tasks', requireAuth, async (req, res) => {
+  try {
+    const { items = [] } = req.body;
+    if (!items.length) return res.status(400).json({ error: 'Add at least one task item' });
+
+    // Validate + normalise items
+    const clean = items.map((it, i) => {
+      if (!it.text?.trim()) throw Object.assign(new Error(`Item ${i + 1}: text is required`), { status: 400 });
+      if (!it.assigneeIds?.length) throw Object.assign(new Error(`Item ${i + 1}: assign at least one member`), { status: 400 });
+      return {
+        id:          it.id || randomUUID(),
+        text:        it.text.trim(),
+        assigneeIds: it.assigneeIds,
+        checks:      Object.fromEntries(it.assigneeIds.map(id => [id, false])),
+      };
+    });
+
+    const room = await prisma.forumRoom.findUnique({ where: { id: req.params.id } });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    const task = await prisma.forumTask.create({
+      data: {
+        roomId:    req.params.id,
+        items:     JSON.stringify(clean),
+        createdBy: req.user.userId,
+      },
+    });
+
+    // Companion message in the feed
+    const msg = await prisma.forumMessage.create({
+      data: {
+        roomId:   req.params.id,
+        userId:   req.user.userId,
+        username: req.user.username,
+        body:     `[TASK] ${clean.length} item${clean.length !== 1 ? 's' : ''}`,
+        type:     'TASK',
+        taskId:   task.id,
+      },
+    });
+    await prisma.forumTask.update({ where: { id: task.id }, data: { messageId: msg.id } });
+
+    const hydratedItems = await hydrateItems(clean);
+    const payload = {
+      type:    'TASK',
+      message: { ...msg, taskId: task.id, type: 'TASK' },
+      task:    { ...task, items: hydratedItems },
+    };
+    broadcastToRoom(req.params.id, payload);
+
+    // Notify each unique assignee so they see a live ping even if in a different room
+    const allAssigneeIds = allItemAssignees(clean);
+    const notifyPayload  = {
+      type:   'TASK_ASSIGNED',
+      taskId: task.id,
+      messageId: msg.id,
+      roomId: req.params.id,
+      roomName: room.name,
+      preview: clean[0]?.text || 'New task',
+      assignedBy: req.user.username,
+    };
+    allClients.forEach(ws => {
+      if (allAssigneeIds.includes(ws.userId) && ws.readyState === 1) {
+        ws.send(JSON.stringify(notifyPayload));
+      }
+    });
+
+    res.status(201).json(payload);
+  } catch (err) {
+    console.error(err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Failed to create task' });
+  }
+});
+
+// PUT /api/forum/tasks/:id — edit task items (admin only)
+app.put('/api/forum/tasks/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!items?.length) return res.status(400).json({ error: 'Need at least one item' });
+
+    const existing = await prisma.forumTask.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: 'Task not found' });
+
+    const oldItems = JSON.parse(existing.items || '[]');
+    const oldMap   = Object.fromEntries(oldItems.map(it => [it.id, it]));
+
+    const clean = items.map((it, i) => {
+      if (!it.text?.trim()) throw Object.assign(new Error(`Item ${i + 1}: text is required`), { status: 400 });
+      if (!it.assigneeIds?.length) throw Object.assign(new Error(`Item ${i + 1}: assign at least one member`), { status: 400 });
+      const prev = it.id && oldMap[it.id] ? oldMap[it.id].checks || {} : {};
+      // Preserve existing checks, reset for new/removed assignees
+      const checks = Object.fromEntries(
+        it.assigneeIds.map(id => [id, prev[id] ?? false])
+      );
+      return { id: it.id || randomUUID(), text: it.text.trim(), assigneeIds: it.assigneeIds, checks };
+    });
+
+    const task = await prisma.forumTask.update({
+      where: { id: req.params.id },
+      data:  { items: JSON.stringify(clean) },
+    });
+
+    const hydratedItems = await hydrateItems(clean);
+    const payload = { type: 'TASK_UPDATED', task: { ...task, items: hydratedItems } };
+    broadcastToRoom(task.roomId, payload);
+
+    // Notify any newly added assignees
+    const newAssigneeIds = allItemAssignees(clean);
+    const notifyPayload  = {
+      type:    'TASK_ASSIGNED',
+      taskId:  task.id,
+      roomId:  task.roomId,
+      preview: clean[0]?.text || 'Updated task',
+      assignedBy: req.user.username,
+    };
+    allClients.forEach(ws => {
+      if (newAssigneeIds.includes(ws.userId) && ws.readyState === 1) {
+        ws.send(JSON.stringify(notifyPayload));
+      }
+    });
+
+    res.json(payload);
+  } catch (err) {
+    console.error(err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || 'Failed to update task' });
+  }
+});
+
+// PATCH /api/forum/tasks/:id/check — assignee toggles their own item check
+// Body: { itemId }
+app.patch('/api/forum/tasks/:id/check', requireAuth, async (req, res) => {
+  try {
+    const { itemId } = req.body;
+    const task = await prisma.forumTask.findUnique({ where: { id: req.params.id } });
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    const items = JSON.parse(task.items || '[]');
+    const item  = items.find(it => it.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (!(item.assigneeIds || []).includes(req.user.userId)) {
+      return res.status(403).json({ error: 'You are not assigned to this item' });
+    }
+
+    item.checks[req.user.userId] = !item.checks[req.user.userId];
+
+    // Check if ALL items are fully done
+    const allDone = items.every(it =>
+      (it.assigneeIds || []).every(uid => it.checks[uid])
+    );
+
+    const updated = await prisma.forumTask.update({
+      where: { id: req.params.id },
+      data:  { items: JSON.stringify(items) },
+    });
+
+    const hydratedItems = await hydrateItems(items);
+    const payload = { type: 'TASK_UPDATED', task: { ...updated, items: hydratedItems }, allDone };
+    broadcastToRoom(task.roomId, payload);
+
+    if (allDone) {
+      const firstText = items[0]?.text || 'Task';
+      broadcastAll({ type: 'TASK_ALL_DONE', taskId: task.id, roomId: task.roomId, title: firstText });
+    }
+
+    res.json(payload);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to toggle check' });
+  }
+});
+
+// GET /api/forum/rooms/:id/tasks — fetch all tasks for feed hydration
+app.get('/api/forum/rooms/:id/tasks', requireAuth, async (req, res) => {
+  try {
+    const tasks = await prisma.forumTask.findMany({
+      where:   { roomId: req.params.id },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const out = await Promise.all(tasks.map(async t => {
+      const items = JSON.parse(t.items || '[]');
+      return { ...t, items: await hydrateItems(items) };
+    }));
+    res.json(out);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+// POST /api/forum/rooms/:id/upload — send a file attachment as a message
+app.post('/api/forum/rooms/:id/upload', requireAuth, forumUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const room = await prisma.forumRoom.findUnique({ where: { id: req.params.id } });
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+
+    // Access check for private rooms
+    if (!room.isGeneral && req.user.role !== 'admin') {
+      const member = await prisma.forumMember.findUnique({
+        where: { roomId_userId: { roomId: req.params.id, userId: req.user.userId } },
+      });
+      if (!member) return res.status(403).json({ error: 'Not a member' });
+    }
+
+    const proto    = req.headers['x-forwarded-proto'] || req.protocol;
+    const host     = req.headers['x-forwarded-host']  || req.get('host');
+    const fileUrl  = `${proto}://${host}/uploads/${req.file.filename}`;
+    const isImage  = req.file.mimetype.startsWith('image/');
+
+    // Store as a message with type FILE so it renders differently
+    const msg = await prisma.forumMessage.create({
+      data: {
+        roomId:   req.params.id,
+        userId:   req.user.userId,
+        username: req.user.username,
+        body:     JSON.stringify({
+          url:          fileUrl,
+          originalName: req.file.originalname,
+          mimeType:     req.file.mimetype,
+          size:         req.file.size,
+          isImage,
+        }),
+        type: 'FILE',
+      },
+    });
+
+    const payload = { type: 'MESSAGE', message: msg };
+    broadcastToRoom(req.params.id, payload);
+    res.status(201).json(msg);
+  } catch (err) {
+    console.error('Forum upload error:', err);
+    res.status(500).json({ error: err.message || 'Upload failed' });
+  }
+});
+
 app.get('/api/forum/rooms/:id/messages', requireAuth, requireMemberCapability('forum'), async (req, res) => {
   try {
     // Access control: general is open to all; private rooms require membership

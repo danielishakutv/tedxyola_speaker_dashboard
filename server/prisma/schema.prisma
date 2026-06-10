@@ -186,7 +186,23 @@ model ForumMessage {
   userId    String
   username  String    // denormalised for fast reads
   body      String
+  type      String    @default("MESSAGE") // "MESSAGE" | "TASK"
+  taskId    String?   // set when type = TASK, links to ForumTask
   createdAt DateTime  @default(now())
+}
+
+// A task card posted inside a forum room.
+// items: JSON array of { id, text, assigneeIds: string[], done: { userId: bool } }
+// assigneeIds on the root: all unique assignees across items (for quick lookup)
+model ForumTask {
+  id          String   @id @default(uuid())
+  roomId      String
+  items       String   @default("[]") // JSON: [{id, text, assigneeIds, checks:{userId:bool}}]
+  createdBy   String   // userId
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  // The message card that represents this task in the room feed
+  messageId   String?  @unique
 }
 
 model Popup {
